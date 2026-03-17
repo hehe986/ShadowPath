@@ -3,6 +3,8 @@ import datetime
 
 class Logger:
 
+    DEBUG = False  # 🔥 toggle debug mode
+
     @staticmethod
     def info(message):
         print(f"[+] {message}")
@@ -18,6 +20,12 @@ class Logger:
     @staticmethod
     def success(message):
         print(f"[✓] {message}")
+
+    # 🔥 TAMBAHAN (WAJIB)
+    @staticmethod
+    def debug(message):
+        if Logger.DEBUG:
+            print(f"[DEBUG] {message}")
 
     @staticmethod
     def timestamp():
