@@ -1,5 +1,5 @@
 import threading
-from queue import Queue
+from queue import Queue, Empty
 
 from core.web_requester import WebRequester
 from core.classifier import EndpointClassifier
@@ -32,32 +32,39 @@ class ActiveScanner:
             return []
 
     # =========================
-    # WORKER THREAD
+    # WORKER THREAD (FIXED)
     # =========================
     def worker(self):
-        while not self.queue.empty():
 
-            path = self.queue.get()
+        while True:
+            try:
+                path = self.queue.get(timeout=1)
+            except Empty:
+                break  # queue habis → keluar thread
 
-            url = f"https://{self.domain}/{path.lstrip('/')}"
+            try:
+                url = f"https://{self.domain}/{path.lstrip('/')}"
 
-            result = self.requester.request(url)
+                result = self.requester.request(url)
 
-            if result and result["status_code"]:
+                if result:
+                    status = result["status_code"]
 
-                status = result["status_code"]
+                    # 🔥 filter response menarik
+                    if status in [200, 301, 302, 401, 403]:
 
-                # hanya ambil response menarik
-                if status in [200, 301, 302, 401, 403]:
+                        Logger.info(f"[{status}] {url}")
 
-                    Logger.info(f"[{status}] {url}")
+                        self.results.append({
+                            "url": url,
+                            "status_code": status
+                        })
 
-                    self.results.append({
-                        "url": url,
-                        "status_code": status
-                    })
+            except Exception as e:
+                Logger.debug(f"Worker error: {e}")
 
-            self.queue.task_done()
+            finally:
+                self.queue.task_done()
 
     # =========================
     # RUN SCAN
@@ -73,29 +80,38 @@ class ActiveScanner:
             return {
                 "total_tested": 0,
                 "total_found": 0,
-                "classified": {"public": [], "hidden": []}
+                "classified": {
+                    "public": [],
+                    "hidden": [],
+                    "sensitive": []
+                }
             }
 
+        # masukkan ke queue
         for path in paths:
             self.queue.put(path)
 
         threads = []
 
+        # start threads
         for _ in range(self.threads):
             t = threading.Thread(target=self.worker)
             t.daemon = True
             t.start()
             threads.append(t)
 
+        # tunggu selesai
         self.queue.join()
 
         Logger.success(f"Total tested: {len(paths)}")
         Logger.success(f"Total found: {len(self.results)}")
 
         # =========================
-        # CLASSIFY
+        # CLASSIFY (FIXED)
         # =========================
-        classified = self.classifier.classify_status(self.results)
+        urls = [r["url"] for r in self.results]
+
+        classified = self.classifier.classify_list(urls)
 
         return {
             "total_tested": len(paths),
