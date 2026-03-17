@@ -10,6 +10,7 @@ from core.downloader import Downloader
 
 from scanner.endpoint_scanner import EndpointScanner
 from scanner.parameter_scanner import ParameterScanner
+from scanner.active_scanner import ActiveScanner  # 🆕 NEW
 
 from filters.domain_filter import DomainFilter
 from filters.endpoint_filter import EndpointFilter
@@ -34,23 +35,13 @@ def save_json(data):
         Logger.error(f"Failed to save JSON: {e}")
 
 
-def main():
+# =========================
+# 🔵 OSINT MODE (GITHUB)
+# =========================
+def run_github_scan(target, args):
 
-    parser = argparse.ArgumentParser(description="ShadowPath - Hidden Endpoint Finder")
+    Logger.info("Mode: OSINT (GitHub)")
 
-    parser.add_argument("-d", "--domain", required=True, help="Target domain")
-    parser.add_argument("-k", "--token", help="GitHub API token")
-    parser.add_argument("--no-validate", action="store_true", help="Disable endpoint validation")
-
-    args = parser.parse_args()
-
-    target = args.domain.lower()
-
-    show_banner()
-
-    Logger.info(f"Target: {target}")
-
-    # Initialize modules
     github = GitHubSearch(token=args.token)
     crawler = RepoCrawler()
     downloader = Downloader()
@@ -61,7 +52,6 @@ def main():
     domain_filter = DomainFilter(target)
     endpoint_filter = EndpointFilter()
 
-    # Step 1: Search GitHub
     Logger.info("Searching GitHub...")
 
     results = github.search_code(target, per_page=config.GITHUB_PER_PAGE)
@@ -72,14 +62,10 @@ def main():
         Logger.warn("No results found")
         return
 
-    # Step 2: Crawl repos
     repos = crawler.extract_repos(results)
-
     Logger.info(f"Unique Repos: {len(repos)}")
 
-    # Step 3: Download files
     Logger.info("Downloading files...")
-
     files = downloader.fetch_multiple(results)
 
     Logger.success(f"Downloaded: {len(files)} files")
@@ -88,30 +74,21 @@ def main():
         Logger.warn("No files downloaded")
         return
 
-    # Step 4: Scan endpoints
     Logger.info("Scanning endpoints...")
-
     endpoint_data = endpoint_scanner.scan(files)
 
     endpoints = []
     for category in endpoint_data["classified"].values():
         endpoints.extend(category)
 
-    # Step 5: Filter domain
     endpoints = domain_filter.filter(endpoints)
-
-    # Step 6: Clean endpoints
     endpoints = endpoint_filter.filter(endpoints)
 
-    # Step 7: Re-classify after filtering
     classified = endpoint_scanner.classifier.classify_list(endpoints)
 
-    # Step 8: Scan parameters
     Logger.info("Scanning parameters...")
-
     param_data = parameter_scanner.scan(files)
 
-    # Step 9: Output
     OutputFormatter.print_summary(
         target,
         len(results),
@@ -120,32 +97,106 @@ def main():
 
     OutputFormatter.print_results(classified)
 
-    # Step 10: Save results
+    return {
+        "results": results,
+        "endpoint_data": endpoint_data,
+        "classified": classified,
+        "parameters": param_data
+    }
+
+
+# =========================
+# 🔴 ACTIVE MODE (WEB SCAN)
+# =========================
+def run_active_scan(target):
+
+    Logger.info("Mode: ACTIVE SCAN")
+
+    scanner = ActiveScanner(
+        domain=target,
+        wordlist=config.WORDLIST_PATH,
+        threads=config.THREADS,
+        timeout=config.TIMEOUT
+    )
+
+    result = scanner.scan()
+
+    classified = result["classified"]
+
+    OutputFormatter.print_summary(
+        target,
+        result["total_tested"],
+        result["total_found"]
+    )
+
+    OutputFormatter.print_results(classified)
+
+    return result
+
+
+# =========================
+# 🚀 MAIN
+# =========================
+def main():
+
+    parser = argparse.ArgumentParser(description="ShadowPath - Hidden Endpoint Finder")
+
+    parser.add_argument("-d", "--domain", required=True, help="Target domain")
+    parser.add_argument("-k", "--token", help="GitHub API token")
+    parser.add_argument("--no-validate", action="store_true", help="Disable endpoint validation")
+
+    # 🆕 NEW MODE
+    parser.add_argument("--active", action="store_true", help="Enable active web scanning")
+
+    args = parser.parse_args()
+
+    target = args.domain.lower()
+
+    show_banner()
+    Logger.info(f"Target: {target}")
+
+    # =========================
+    # MODE SWITCH
+    # =========================
+    if args.active:
+        result = run_active_scan(target)
+
+        json_data = {
+            "target": target,
+            "mode": "active",
+            "stats": {
+                "total_tested": result["total_tested"],
+                "total_found": result["total_found"]
+            },
+            "endpoints": result["classified"]
+        }
+
+    else:
+        result = run_github_scan(target, args)
+
+        if not result:
+            return
+
+        json_data = {
+            "target": target,
+            "mode": "osint",
+            "stats": {
+                "github_results": len(result["results"]),
+                "total_endpoints": result["endpoint_data"]["total_found"],
+                "valid_endpoints": result["endpoint_data"]["total_valid"]
+            },
+            "endpoints": result["classified"],
+            "parameters": result["parameters"]
+        }
+
+    # =========================
+    # SAVE RESULTS
+    # =========================
     if config.SAVE_RESULTS:
 
         create_results_dir()
 
-        OutputFormatter.save_to_file(config.ENDPOINTS_FILE, classified)
-
-        # Save parameters
-        try:
-            with open(config.PARAMETERS_FILE, "w") as f:
-                for p in param_data["all"]:
-                    f.write(p + "\n")
-        except Exception as e:
-            Logger.error(f"Failed to save parameters: {e}")
-
-        # Save JSON
-        json_data = {
-            "target": target,
-            "stats": {
-                "github_results": len(results),
-                "total_endpoints": endpoint_data["total_found"],
-                "valid_endpoints": endpoint_data["total_valid"]
-            },
-            "endpoints": classified,
-            "parameters": param_data
-        }
+        OutputFormatter.save_to_file(config.ENDPOINTS_FILE, json_data["endpoints"])
 
         save_json(json_data)
 
