@@ -1,0 +1,9 @@
+# ShadowPath Endpoint Results
+
+# PUBLIC
+https://target.com/user
+https://target.com/products
+
+# HIDDEN
+https://target.com/admin
+https://target.com/api/login

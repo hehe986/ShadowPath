@@ -1,0 +1,7 @@
+# ShadowPath Parameter Results
+
+id
+user
+token
+session
+email
