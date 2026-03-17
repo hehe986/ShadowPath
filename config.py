@@ -1,14 +1,30 @@
 # ShadowPath Configuration
 
-# GitHub
+# =========================
+# GITHUB
+# =========================
 GITHUB_PER_PAGE = 30
 
-# Scanner
+
+# =========================
+# SCANNER (OSINT)
+# =========================
 VALIDATE_ENDPOINTS = True
 REQUEST_TIMEOUT = 10
 DELAY_BETWEEN_REQUESTS = 0
 
-# Filters
+
+# =========================
+# ACTIVE SCAN 🔥
+# =========================
+WORDLIST_PATH = "wordlists/endpoints.txt"
+THREADS = 10
+TIMEOUT = 5
+
+
+# =========================
+# FILTERS
+# =========================
 BLOCKED_KEYWORDS = [
     "localhost",
     "127.0.0.1",
@@ -18,7 +34,10 @@ BLOCKED_KEYWORDS = [
     "test"
 ]
 
-# Output
+
+# =========================
+# OUTPUT
+# =========================
 SAVE_RESULTS = True
 RESULTS_DIR = "results"
 
