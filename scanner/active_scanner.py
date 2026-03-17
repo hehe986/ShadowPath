@@ -2,7 +2,7 @@ import threading
 from queue import Queue
 
 from core.web_requester import WebRequester
-from core.classifier import Classifier
+from core.classifier import EndpointClassifier
 from utils.logger import Logger
 
 
@@ -18,7 +18,7 @@ class ActiveScanner:
         self.results = []
 
         self.requester = WebRequester(timeout=self.timeout)
-        self.classifier = Classifier()
+        self.classifier = EndpointClassifier()
 
     # =========================
     # LOAD WORDLIST
