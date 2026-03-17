@@ -39,7 +39,7 @@ class ActiveScanner:
 
             path = self.queue.get()
 
-            url = f"https://{self.domain}/{path}"
+            url = f"https://{self.domain}/{path.lstrip('/')}"
 
             result = self.requester.request(url)
 
@@ -48,7 +48,7 @@ class ActiveScanner:
                 status = result["status_code"]
 
                 # hanya ambil response menarik
-                if status < 500:
+                if status in [200, 301, 302, 401, 403]:
 
                     Logger.info(f"[{status}] {url}")
 
