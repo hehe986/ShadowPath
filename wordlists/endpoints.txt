@@ -147,17 +147,10 @@
 /api/v1/
 /api/v2/
 /api/v3/
-/api/login
-/api/auth
-/api/register
-/api/users
 /api/data
 /api/posts
 /api/news
-/api/admin
 /admin/
-/admin/login
-/admin/dashboard
 /adminpanel/
 /dashboard/
 /panel/
