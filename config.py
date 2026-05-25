@@ -1,77 +1,71 @@
-# =========================
-# ShadowPath Configuration
-# =========================
+# ╔══════════════════════════════════════════════════════╗
+# ║           ShadowPath Configuration v2.0.0            ║
+# ╚══════════════════════════════════════════════════════╝
 
+# =========================
+# SOURCES (OSINT MODE)
+# =========================
+GITHUB_PER_PAGE  = 30
+GITLAB_PER_PAGE  = 30
+SOURCES          = ["github", "gitlab"]   # aktifkan bitbucket jika perlu
 
 # =========================
-# GITHUB (OSINT MODE)
+# CREDENTIALS (isi via env atau langsung)
 # =========================
-GITHUB_PER_PAGE = 30
-
+GITHUB_TOKEN           = ""   # atau set env GITHUB_TOKEN
+GITLAB_TOKEN           = ""   # atau set env GITLAB_TOKEN
+BITBUCKET_USER         = ""
+BITBUCKET_APP_PASSWORD = ""
+BITBUCKET_WORKSPACE    = ""
 
 # =========================
 # PASSIVE SCAN (OSINT)
 # =========================
-VALIDATE_ENDPOINTS = True
-REQUEST_TIMEOUT = 10
-DELAY_BETWEEN_REQUESTS = 0
-
+VALIDATE_ENDPOINTS       = True
+REQUEST_TIMEOUT          = 10
+DELAY_BETWEEN_REQUESTS   = 1   # detik, 0 = tanpa delay
 
 # =========================
-# ACTIVE SCAN 🔥
+# ACTIVE SCAN
 # =========================
-WORDLIST_PATH = "wordlists/endpoints.txt"
+WORDLIST_PATH   = "wordlists/endpoints.txt"
+THREADS         = 10
+TIMEOUT         = 8
+MAX_RETRIES     = 2
 
-THREADS = 20          # 🔥 default dinaikkan (lebih cepat)
-TIMEOUT = 8           # 🔥 lebih realistis (biar gak banyak timeout)
+INTERESTING_STATUS = [200, 201, 204, 301, 302, 307, 401, 403, 405, 500]
 
-# Retry kalau gagal
-MAX_RETRIES = 2
-
-# Status code yang dianggap menarik
-INTERESTING_STATUS = [200, 204, 301, 302, 307, 401, 403]
-
-# Filter berdasarkan panjang response (anti false positive)
 MIN_RESPONSE_LENGTH = 50
-MAX_RESPONSE_LENGTH = 1000000
-
+MAX_RESPONSE_LENGTH = 1_000_000
 
 # =========================
 # REQUEST SETTINGS
 # =========================
-VERIFY_SSL = False     # 🔥 disable SSL verify
+VERIFY_SSL       = False
 FOLLOW_REDIRECTS = True
-
-# Random User-Agent
-RANDOM_UA = True
-
-# Delay random (anti WAF / rate limit)
-RANDOM_DELAY = (0, 0.3)
-
+RANDOM_UA        = True
+DELAY_RANGE      = (1, 3)   # detik, random per request
 
 # =========================
 # FILTERS
 # =========================
 BLOCKED_KEYWORDS = [
-    "localhost",
-    "127.0.0.1",
-    "0.0.0.0",
-    ".local",
-    "dev",
-    "test"
+    "localhost", "127.0.0.1", "0.0.0.0", "::1", ".local",
 ]
 
+# =========================
+# DUPLICATE DETECTION
+# =========================
+SIMILARITY_THRESHOLD = 0.92   # 0.0 - 1.0
 
 # =========================
 # OUTPUT
 # =========================
-SAVE_RESULTS = True
-RESULTS_DIR = "results"
-
-ENDPOINTS_FILE = f"{RESULTS_DIR}/endpoints.txt"
+SAVE_RESULTS    = True
+RESULTS_DIR     = "results"
+ENDPOINTS_FILE  = f"{RESULTS_DIR}/endpoints.txt"
 PARAMETERS_FILE = f"{RESULTS_DIR}/parameters.txt"
-JSON_FILE = f"{RESULTS_DIR}/scan_results.json"
-
+JSON_FILE       = f"{RESULTS_DIR}/scan_results.json"
 
 # =========================
 # DEBUG
