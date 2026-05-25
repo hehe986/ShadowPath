@@ -234,7 +234,7 @@ def save_results(target: str, result: dict):
     json_payload = {
         "meta": {
             "tool":    "ShadowPath Hidden Endpoint Discovery Engine",
-            "version": "2.0.0",
+            "version": "1.5.0",
             "target":  target,
             "mode":    mode,
         },
@@ -289,7 +289,7 @@ def save_results(target: str, result: dict):
 # =========================
 def main():
     parser = argparse.ArgumentParser(
-        description="ShadowPath v2.0.0 — Hidden Endpoint Discovery Engine",
+        description="ShadowPath v1.5.0 — Hidden Endpoint Discovery Engine",
         formatter_class=argparse.RawTextHelpFormatter,
     )
 
