@@ -1,9 +1,44 @@
-# ShadowPath Endpoint Results
+# ╔══════════════════════════════════════════════════════╗
+# ║          ShadowPath - Endpoint Discovery Results      ║
+# ╚══════════════════════════════════════════════════════╝
+# Target      : target.com
+# Scan Date   : 2024-01-01 00:00:00
+# Total Found : 0
+# Sources     : github, gitlab, bitbucket
+# ──────────────────────────────────────────────────────
 
-# PUBLIC
-https://target.com/user
-https://target.com/products
+# ════════════════════════════════
+# [PUBLIC] Status 200 - Accessible
+# ════════════════════════════════
+# https://target.com/user          [200] [len:1234] [github:user/repo]
+# https://target.com/products      [200] [len:5678] [gitlab:user/repo]
 
-# HIDDEN
-https://target.com/admin
-https://target.com/api/login
+# ════════════════════════════════
+# [HIDDEN] Status 401/403 - Restricted
+# ════════════════════════════════
+# https://target.com/admin         [403] [len:512]  [github:user/repo]
+# https://target.com/api/login     [401] [len:256]  [github:user/repo]
+
+# ════════════════════════════════
+# [SENSITIVE] Auth/Token/Key Endpoints
+# ════════════════════════════════
+# https://target.com/api/token     [200] [len:128]  [github:user/repo]
+# https://target.com/auth/reset    [200] [len:890]  [gitlab:user/repo]
+
+# ════════════════════════════════
+# [REDIRECT] 301/302 Redirects
+# ════════════════════════════════
+# https://target.com/dashboard     [301] -> https://target.com/login
+
+# ════════════════════════════════
+# [DUPLICATE WARNING]
+# ════════════════════════════════
+# ⚠️  https://target.com/api/v1/users  == IDENTIK dengan https://target.com/api/users
+# ⚠️  https://target.com/api/v2/users  ~~ MIRIP 95%  dengan https://target.com/api/users
+
+# ════════════════════════════════
+# [SUBDOMAINS DISCOVERED]
+# ════════════════════════════════
+# api.target.com
+# admin.target.com
+# dev.target.com
