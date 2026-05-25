@@ -15,15 +15,19 @@ class ActiveScanner:
 
         self.queue = Queue()
         self.results = []
-        self._lock = threading.Lock()  # ✅ Fix race condition
+        self._lock = threading.Lock()
 
         self.requester = WebRequester(timeout=self.timeout)
         self.classifier = EndpointClassifier()
         self.validator = EndpointValidator(timeout=self.timeout)
 
-        # Counter untuk progress real-time
         self._tested = 0
         self._found = 0
+
+        # Baseline soft 404 detection
+        self._baseline_fingerprint = None
+        self._baseline_length = None
+        self._baseline_tolerance = 50  # toleransi selisih length (bytes)
 
     # =========================
     # 📂 LOAD WORDLIST
@@ -34,7 +38,6 @@ class ActiveScanner:
                 lines = []
                 for line in f:
                     line = line.strip()
-                    # Skip comment dan baris kosong
                     if line and not line.startswith("#"):
                         lines.append(line)
             Logger.info(f"Wordlist loaded: {len(lines)} paths")
@@ -45,6 +48,48 @@ class ActiveScanner:
         except Exception as e:
             Logger.error(f"Failed to load wordlist: {e}")
             return []
+
+    # =========================
+    # 🧪 BASELINE FINGERPRINT
+    # Request ke path yang pasti tidak ada
+    # untuk tahu seperti apa soft 404 di server ini
+    # =========================
+    def _fetch_baseline(self):
+        import random, string
+        random_path = ''.join(random.choices(string.ascii_lowercase, k=12))
+        url = f"https://{self.domain}/{random_path}_shadowpath_test"
+        Logger.info(f"Fetching baseline (soft 404 fingerprint)...")
+        result = self.requester.request(url)
+        if result and result.get("status_code") == 200:
+            self._baseline_fingerprint = result.get("fingerprint", "")
+            self._baseline_length = result.get("content_length", 0)
+            Logger.warn(
+                f"Server return 200 untuk path random "
+                f"(soft 404 detected, len:{self._baseline_length}) — "
+                f"akan difilter otomatis"
+            )
+        else:
+            Logger.info("Baseline OK — server return non-200 untuk path tidak ada")
+
+    # =========================
+    # 🔍 CEK SOFT 404
+    # =========================
+    def _is_soft_404(self, result: dict) -> bool:
+        """Return True jika response mirip dengan baseline (soft 404)."""
+        if self._baseline_fingerprint is None:
+            return False
+
+        # Exact fingerprint match
+        if result.get("fingerprint") == self._baseline_fingerprint:
+            return True
+
+        # Content length sangat mirip baseline
+        if self._baseline_length is not None:
+            diff = abs(result.get("content_length", 0) - self._baseline_length)
+            if diff <= self._baseline_tolerance:
+                return True
+
+        return False
 
     # =========================
     # ⚙️ WORKER THREAD
@@ -59,7 +104,6 @@ class ActiveScanner:
             try:
                 url = f"https://{self.domain}/{path.lstrip('/')}"
 
-                # Skip jika URL tidak valid
                 if not self.validator.is_valid(url):
                     self.queue.task_done()
                     continue
@@ -73,6 +117,13 @@ class ActiveScanner:
                     status = result["status_code"]
 
                     if status in [200, 201, 301, 302, 307, 401, 403, 405, 500]:
+
+                        # Filter soft 404
+                        if status == 200 and self._is_soft_404(result):
+                            Logger.debug(f"[SOFT 404 filtered] {url}")
+                            self.queue.task_done()
+                            continue
+
                         entry = {
                             "url": url,
                             "status_code": status,
@@ -88,7 +139,6 @@ class ActiveScanner:
                             self._found += 1
                             self.results.append(entry)
 
-                        # Real-time output
                         redirect_info = f" → {result.get('redirect_url')}" if result.get("redirect_url") else ""
                         Logger.info(
                             f"[{status}] {url} "
@@ -113,11 +163,12 @@ class ActiveScanner:
             Logger.warn("Wordlist empty or not found")
             return self._empty_result(0)
 
-        # Isi queue
+        # Fetch baseline dulu sebelum scan
+        self._fetch_baseline()
+
         for path in paths:
             self.queue.put(path)
 
-        # Start threads
         thread_list = []
         actual_threads = min(self.threads, len(paths))
         for _ in range(actual_threads):
@@ -125,27 +176,33 @@ class ActiveScanner:
             t.start()
             thread_list.append(t)
 
-        # Tunggu queue selesai
         self.queue.join()
 
         Logger.success(f"Scan complete — tested: {self._tested}, found: {self._found}")
 
         if not self.results:
+            Logger.warn("Semua hasil difilter sebagai soft 404 atau tidak ada yang menarik")
             return self._empty_result(len(paths))
 
-        # =========================
-        # CLASSIFY
-        # =========================
+        # Classify
         classified = self.classifier.classify_status(self.results)
 
-        # =========================
-        # DUPLICATE DETECTION
-        # =========================
+        # Duplicate detection — tampilkan endpoint yang benar-benar berbeda
         dup_analysis = self.validator.detect_duplicates(self.results)
 
-        # Print duplicate report jika ada
-        if dup_analysis["duplicate_groups"] or dup_analysis["similar_pairs"]:
-            self.validator.print_duplicate_report(dup_analysis)
+        Logger.section("HASIL UNIK (response berbeda)")
+        for url in dup_analysis.get("unique", []):
+            item = next((r for r in self.results if r["url"] == url), {})
+            Logger.finding(
+                item.get("status_code", 0),
+                url,
+                f"len:{item.get('content_length', 0)}"
+            )
+
+        if dup_analysis["warnings"]:
+            Logger.section("DUPLICATE / SIMILAR WARNINGS")
+            for url, msg in dup_analysis["warnings"].items():
+                Logger.warning_duplicate(msg)
 
         return {
             "total_tested": len(paths),
@@ -174,7 +231,6 @@ class ActiveScanner:
         }
 
     def get_progress(self) -> dict:
-        """Return progress saat ini (bisa dipanggil dari thread lain)."""
         with self._lock:
             return {
                 "tested": self._tested,
