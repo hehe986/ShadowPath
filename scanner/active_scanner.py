@@ -187,20 +187,46 @@ class ActiveScanner:
         # Classify
         classified = self.classifier.classify_status(self.results)
 
-        # Duplicate detection — tampilkan endpoint yang benar-benar berbeda
+        # Duplicate detection
         dup_analysis = self.validator.detect_duplicates(self.results)
+        unique_urls = set(dup_analysis.get("unique", []))
+        detail = {r["url"]: r for r in self.results}
 
-        Logger.section("HASIL UNIK (response berbeda)")
-        for url in dup_analysis.get("unique", []):
-            item = next((r for r in self.results if r["url"] == url), {})
-            Logger.finding(
-                item.get("status_code", 0),
-                url,
-                f"len:{item.get('content_length', 0)}"
-            )
+        # SENSITIVE
+        sensitive = classified.get("sensitive", [])
+        if sensitive:
+            Logger.section(f"🔴 SENSITIVE ENDPOINTS ({len(sensitive)})")
+            for url in sorted(sensitive):
+                r = detail.get(url, {})
+                warn = " ⚠️ DUPLIKAT" if url not in unique_urls else ""
+                Logger.finding(r.get("status_code", 0), url, f"len:{r.get('content_length',0)}{warn}")
+
+        # HIDDEN
+        hidden = classified.get("hidden", [])
+        if hidden:
+            Logger.section(f"🟡 HIDDEN ENDPOINTS - 401/403 ({len(hidden)})")
+            for url in sorted(hidden):
+                r = detail.get(url, {})
+                warn = " ⚠️ DUPLIKAT" if url not in unique_urls else ""
+                Logger.finding(r.get("status_code", 0), url, f"len:{r.get('content_length',0)}{warn}")
+
+        # PUBLIC UNIK
+        public = classified.get("public", [])
+        public_unique = [u for u in public if u in unique_urls]
+        public_dup = [u for u in public if u not in unique_urls]
+        if public_unique:
+            Logger.section(f"🟢 PUBLIC ENDPOINTS - UNIK ({len(public_unique)})")
+            for url in sorted(public_unique):
+                r = detail.get(url, {})
+                Logger.finding(r.get("status_code", 0), url, f"len:{r.get('content_length',0)}")
+        if public_dup:
+            Logger.section(f"⚪ PUBLIC - DUPLIKAT ({len(public_dup)}) — kemungkinan soft 404")
+            for url in sorted(public_dup):
+                r = detail.get(url, {})
+                Logger.finding(r.get("status_code", 0), url, f"len:{r.get('content_length',0)}")
 
         if dup_analysis["warnings"]:
-            Logger.section("DUPLICATE / SIMILAR WARNINGS")
+            Logger.section("⚠️ DUPLICATE WARNINGS")
             for url, msg in dup_analysis["warnings"].items():
                 Logger.warning_duplicate(msg)
 
