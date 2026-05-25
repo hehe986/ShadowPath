@@ -1,5 +1,4 @@
 def show_banner():
-    
     banner = r"""
   ░██████   ░██                          ░██                              ░█████████                ░██    ░██        
  ░██   ░██  ░██                          ░██                              ░██     ░██               ░██    ░██        
@@ -8,11 +7,11 @@ def show_banner():
         ░██ ░██    ░██  ░███████  ░██    ░██ ░██    ░██  ░██  ░████  ░██  ░██          ░███████     ░██    ░██    ░██ 
  ░██   ░██  ░██    ░██ ░██   ░██  ░██   ░███ ░██    ░██   ░██░██ ░██░██   ░██         ░██   ░██     ░██    ░██    ░██ 
   ░██████   ░██    ░██  ░█████░██  ░█████░██  ░███████     ░███   ░███    ░██          ░█████░██     ░████ ░██    ░██ 
-
-ShadowPath - Hidden Endpoint Discovery
-
-Author  : H1lm1.exe
-Version : 1.0
 """
-
     print(banner)
+    print("  ShadowPath - Hidden Endpoint Discovery Engine")
+    print("  Author  : H1lm1.exe")
+    print("  Version : 1.5.0")
+    print("  Sources : GitHub · GitLab · Bitbucket")
+    print("  " + "─" * 50)
+    print()
