@@ -165,8 +165,12 @@ class EndpointScanner:
         # Deduplikasi dengan normalisasi
         filtered = self.ep_filter.deduplicate(filtered)
         # Filter domain jika ada
+        # BUG FIX: gunakan filter_and_build() bukan filter() agar relative path
+        # seperti /api/v1/users otomatis di-attach ke domain target, bukan dibuang.
+        # domain_filter.filter() hanya menerima full URL dengan netloc sehingga
+        # semua relative path dibuang dan hasilnya selalu 0 endpoint.
         if self.domain_filter:
-            filtered = self.domain_filter.filter(filtered)
+            filtered = self.domain_filter.filter_and_build(filtered)
         return filtered
 
     def _empty_result(self, total_found: int = 0) -> dict:
