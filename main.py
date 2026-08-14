@@ -11,6 +11,7 @@ from core.downloader import Downloader
 from scanner.endpoint_scanner import EndpointScanner
 from scanner.parameter_scanner import ParameterScanner
 from scanner.active_scanner import ActiveScanner
+from scanner.crawl_scanner import CrawlScanner
 
 from filters.domain_filter import DomainFilter
 from filters.endpoint_filter import EndpointFilter
@@ -285,6 +286,73 @@ def save_results(target: str, result: dict):
 
 
 # =========================
+# 🕸️ CRAWL MODE
+# =========================
+def run_crawl_scan(target: str, args) -> dict:
+    Logger.section("CRAWL MODE — Real-Time Web Spider")
+
+    timing   = args.timing or config.STEALTH_TIMING
+    validate = not args.no_validate
+
+    scanner = CrawlScanner(
+        target_domain=target,
+        max_pages=args.max_pages or config.CRAWL_MAX_PAGES,
+        max_depth=args.max_depth or config.CRAWL_MAX_DEPTH,
+        timing_mode=timing,
+        validate=validate,
+        crawl_js=not args.no_js,
+        follow_subdomains=args.follow_subs,
+        timeout=config.REQUEST_TIMEOUT,
+    )
+
+    seed = args.seed or None
+    Logger.info(f"Timing mode : {timing}")
+    Logger.info(f"Max pages   : {args.max_pages or config.CRAWL_MAX_PAGES}")
+    Logger.info(f"Max depth   : {args.max_depth or config.CRAWL_MAX_DEPTH}")
+    Logger.info(f"Crawl JS    : {not args.no_js}")
+    Logger.info(f"Validate    : {validate}")
+    if seed:
+        Logger.info(f"Seed URL    : {seed}")
+    print()
+
+    try:
+        result = scanner.scan(seed_url=seed)
+    finally:
+        scanner.close()
+
+    # Print summary stats
+    cs = result.get("crawl_stats", {})
+    OutputFormatter.print_summary(target, {
+        "endpoints": {
+            "total_extracted": result.get("total_found", 0),
+            "after_filter":    result.get("total_after_filter", 0),
+            "validated":       result.get("total_validated", 0),
+            "unique_response": len(
+                result.get("duplicate_analysis", {}).get("unique", [])
+            ) if result.get("duplicate_analysis") else 0,
+        },
+        "parameters": {
+            "total":     result.get("parameters", {}).get("total", 0),
+            "sensitive": len(result.get("parameters", {}).get("sensitive", [])),
+        },
+    })
+
+    # Print crawl stats detail
+    if cs:
+        Logger.section("CRAWL STATS")
+        print(f"  Pages crawled   : {cs.get('pages_crawled', 0)}")
+        print(f"  URLs found      : {cs.get('urls_found', 0)}")
+        print(f"  JS files parsed : {cs.get('js_files', 0)}")
+        print(f"  Forms found     : {cs.get('forms', 0)}")
+
+    # Print stealth session stats
+    if hasattr(scanner.crawler, 'session'):
+        scanner.crawler.session.print_stats()
+
+    return result
+
+
+# =========================
 # 🚀 MAIN
 # =========================
 def main():
@@ -322,6 +390,35 @@ def main():
         action="store_true",
         help="Enable debug output")
 
+    # ── CRAWL MODE ──
+    crawl_grp = parser.add_argument_group("Crawl Mode (--crawl)")
+    crawl_grp.add_argument("--crawl",
+        action="store_true",
+        help="Enable real-time web spider (crawl langsung ke target)")
+    crawl_grp.add_argument("--seed",
+        default="",
+        help="Seed URL untuk crawler (default: https://<domain>/)")
+    crawl_grp.add_argument("--max-pages",
+        type=int, default=0,
+        help=f"Maks halaman yang di-crawl (default: {config.CRAWL_MAX_PAGES})")
+    crawl_grp.add_argument("--max-depth",
+        type=int, default=0,
+        help=f"Kedalaman spider dari seed (default: {config.CRAWL_MAX_DEPTH})")
+    crawl_grp.add_argument("--timing",
+        default="",
+        choices=["fast", "normal", "slow", "random"],
+        help="Timing mode untuk stealth (default: normal)\n"
+             "  fast   = 0.3-1.5s  [aggressive]\n"
+             "  normal = 1.0-4.0s  [recommended]\n"
+             "  slow   = 3.0-8.0s  [maximum stealth]\n"
+             "  random = mix acak")
+    crawl_grp.add_argument("--no-js",
+        action="store_true",
+        help="Skip download dan parse file JS external")
+    crawl_grp.add_argument("--follow-subs",
+        action="store_true",
+        help="Ikut crawl subdomain dari target domain")
+
     args = parser.parse_args()
 
     # Setup
@@ -339,7 +436,13 @@ def main():
         return
 
     Logger.info(f"Target  : {target}")
-    Logger.info(f"Mode    : {'ACTIVE' if args.active else 'OSINT'}")
+    if args.crawl:
+        mode_label = "CRAWL"
+    elif args.active:
+        mode_label = "ACTIVE"
+    else:
+        mode_label = "OSINT"
+    Logger.info(f"Mode    : {mode_label}")
     if args.no_validate:
         Logger.warn("Validation disabled — no HTTP requests to target")
     print()
@@ -347,7 +450,9 @@ def main():
     start_time = time.time()
 
     # ── RUN ──
-    if args.active:
+    if args.crawl:
+        result = run_crawl_scan(target, args)
+    elif args.active:
         result = run_active_scan(target, args)
     else:
         result = run_osint_scan(target, args)
