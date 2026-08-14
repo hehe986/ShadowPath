@@ -33,8 +33,24 @@ class GitHubSearch:
 
             if r.status_code == 403:
                 retry_after = int(r.headers.get("Retry-After", 60))
-                print(f"[GitHub] Rate limited. Tunggu {retry_after}s...")
+                print(f"[GitHub] Rate limited (403). Tunggu {retry_after}s...")
                 time.sleep(retry_after)
+                return []
+
+            # BUG FIX: tambah handler 429 (Too Many Requests) — GitHub bisa return
+            # 429 selain 403 untuk rate limiting, terutama pada secondary rate limits.
+            if r.status_code == 429:
+                retry_after = int(r.headers.get("Retry-After", 60))
+                print(f"[GitHub] Rate limited (429). Tunggu {retry_after}s...")
+                time.sleep(retry_after)
+                return []
+
+            # BUG FIX: tambah handler 422 (Unprocessable Entity) — terjadi saat query
+            # tidak valid menurut GitHub: terlalu pendek, mengandung karakter khusus,
+            # atau tidak memenuhi syarat minimum search API GitHub.
+            if r.status_code == 422:
+                print(f"[GitHub] Query tidak valid (422): {r.text[:200]}")
+                print("[GitHub] Coba sederhanakan query atau gunakan token untuk akses penuh.")
                 return []
 
             if r.status_code != 200:
