@@ -41,14 +41,18 @@ class OutputFormatter:
         print()
 
     # =========================
-    # 🔍 ENDPOINT RESULTS
+    # 🔍 ENDPOINT RESULTS (4-WAY)
     # =========================
     @staticmethod
     def print_results(classified_data: dict, raw_results: list = None):
         """
-        Print hasil klasifikasi endpoint.
-        classified_data: {sensitive, hidden, public, redirect}
-        raw_results: list of {url, status_code, content_length, ...} untuk detail
+        Print hasil klasifikasi endpoint dengan pemisahan 4-way:
+          - private_open   ⚠️ private tapi TERBUKA (temuan paling menarik)
+          - public_open    ✅ public, accessible
+          - private_closed 🔒 private, tertutup (401/403)
+          - public_closed  ⚪ public, tapi tertutup
+
+        Fallback ke legacy 3-way (public/hidden/sensitive) jika key baru tidak ada.
         """
         # Build index dari raw untuk lookup detail
         detail_index = {}
@@ -56,12 +60,25 @@ class OutputFormatter:
             for r in raw_results:
                 detail_index[r.get("url")] = r
 
-        categories = [
-            ("sensitive", "🔴 SENSITIVE ENDPOINTS"),
-            ("hidden",    "🟡 HIDDEN ENDPOINTS (401/403)"),
-            ("public",    "🟢 PUBLIC ENDPOINTS (200)"),
-            ("redirect",  "🔵 REDIRECT ENDPOINTS"),
-        ]
+        # Deteksi apakah data sudah pakai skema 4-way
+        has_new_schema = any(k in classified_data for k in
+            ("private_open", "public_open", "private_closed", "public_closed"))
+
+        if has_new_schema:
+            categories = [
+                ("private_open",   "⚠️  PRIVATE-OPEN  — Endpoint sensitif TERBUKA (prioritas tinggi)"),
+                ("public_open",    "✅ PUBLIC-OPEN    — Endpoint umum, accessible"),
+                ("private_closed", "🔒 PRIVATE-CLOSED — Endpoint sensitif tapi terkunci (401/403)"),
+                ("public_closed",  "⚪ PUBLIC-CLOSED  — Endpoint umum, tidak ditemukan (404) atau tertutup"),
+            ]
+        else:
+            # Legacy 3-way fallback
+            categories = [
+                ("sensitive", "🔴 SENSITIVE ENDPOINTS"),
+                ("hidden",    "🟡 HIDDEN ENDPOINTS (401/403)"),
+                ("public",    "🟢 PUBLIC ENDPOINTS (200)"),
+                ("redirect",  "🔵 REDIRECT ENDPOINTS"),
+            ]
 
         any_found = False
         for key, title in categories:
@@ -202,12 +219,24 @@ class OutputFormatter:
                 f.write(f"# Total Found : {sum(len(v) for v in classified_data.values())}\n")
                 f.write("#\n\n")
 
-                sections = [
-                    ("sensitive", "[SENSITIVE] Auth/Token/Key Endpoints"),
-                    ("hidden",    "[HIDDEN]    Status 401/403"),
-                    ("public",    "[PUBLIC]    Status 200"),
-                    ("redirect",  "[REDIRECT]  301/302"),
-                ]
+                # Deteksi skema baru vs legacy
+                has_new_schema = any(k in classified_data for k in
+                    ("private_open", "public_open", "private_closed", "public_closed"))
+
+                if has_new_schema:
+                    sections = [
+                        ("private_open",   "[PRIVATE-OPEN]   Endpoint sensitif TERBUKA — prioritas tinggi"),
+                        ("public_open",    "[PUBLIC-OPEN]    Endpoint umum, accessible"),
+                        ("private_closed", "[PRIVATE-CLOSED] Endpoint sensitif tertutup (401/403)"),
+                        ("public_closed",  "[PUBLIC-CLOSED]  Endpoint umum tapi tidak accessible (404)"),
+                    ]
+                else:
+                    sections = [
+                        ("sensitive", "[SENSITIVE] Auth/Token/Key Endpoints"),
+                        ("hidden",    "[HIDDEN]    Status 401/403"),
+                        ("public",    "[PUBLIC]    Status 200"),
+                        ("redirect",  "[REDIRECT]  301/302"),
+                    ]
                 for key, title in sections:
                     items = classified_data.get(key, [])
                     if not items:
