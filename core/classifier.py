@@ -45,40 +45,86 @@ class EndpointClassifier:
     # 🔥 STATUS CODE CLASSIFICATION (ACTIVE SCAN)
     # =========================
     def classify_status(self, results):
-        public = []
-        hidden = []
-        sensitive = []
+        """
+        Klasifikasi 4-way berdasar kombinasi:
+          - sifat endpoint (public umum vs private/hidden) → dari keyword
+          - aksesibilitas (terbuka vs tertutup) → dari HTTP status
+
+        Kategori:
+          public_open     — endpoint umum, bisa diakses (200)
+          public_closed   — endpoint umum, tapi terkunci (401/403/404)
+          private_open    — endpoint hidden/sensitive, tapi TERBUKA (200) ⚠️ paling menarik
+          private_closed  — endpoint hidden/sensitive, tertutup (401/403)
+
+        Legacy keys 'public', 'hidden', 'sensitive' tetap dipertahankan
+        untuk backward compat dengan output formatter yang sudah ada.
+        """
+        public_open     = []
+        public_closed   = []
+        private_open    = []
+        private_closed  = []
+
+        # Legacy buckets
+        public          = []
+        hidden          = []
+        sensitive       = []
 
         for item in results:
             url = item.get("url")
             status = item.get("status_code")
-            if not url or not status:
+            if not url:
                 continue
 
             url_lower = url.lower()
 
-            # 🔴 PRIORITAS 1: sensitive keyword
-            if any(k in url_lower for k in self.sensitive_keywords):
-                sensitive.append(url)
+            # ── STEP 1: Tentukan sifat endpoint (public vs private) ──
+            is_sensitive = any(k in url_lower for k in self.sensitive_keywords)
+            is_hidden    = any(k in url_lower for k in self.hidden_keywords)
+            is_private   = is_sensitive or is_hidden
+
+            # ── STEP 2: Tentukan aksesibilitas (open vs closed) ──
+            if status == 200 or status in (201, 204):
+                accessible = "open"
+            elif status in (401, 403):
+                accessible = "closed"
+            elif status in (301, 302, 307, 308):
+                # Redirect — cek redirect_url apakah menuju login page
+                # Default: treat sebagai closed (kemungkinan besar redirect ke login)
+                accessible = "closed"
+            elif status in (404, 405):
+                accessible = "closed"  # tidak ada / tidak diizinkan
+            else:
+                # 5xx atau status lain — skip (tidak konklusif)
                 continue
 
-            # 🟡 PRIORITAS 2: status-based
-            if status == 200:
+            # ── STEP 3: Isi 4-way bucket ──
+            if is_private and accessible == "open":
+                private_open.append(url)
+                sensitive.append(url) if is_sensitive else hidden.append(url)
+            elif is_private and accessible == "closed":
+                private_closed.append(url)
+                sensitive.append(url) if is_sensitive else hidden.append(url)
+            elif not is_private and accessible == "open":
+                public_open.append(url)
                 public.append(url)
-            elif status in [401, 403]:
-                hidden.append(url)
-            elif status in [301, 302, 307, 308]:
-                # redirect — treat as hidden candidate
-                hidden.append(url)
-            # 🟣 PRIORITAS 3: fallback keyword
-            elif any(k in url_lower for k in self.hidden_keywords):
-                hidden.append(url)
+            elif not is_private and accessible == "closed":
+                public_closed.append(url)
+                # legacy: closed public tidak masuk 'public' bucket
 
-        return {
-            "public": list(set(public)),
-            "hidden": list(set(hidden)),
-            "sensitive": list(set(sensitive))
+        # Dedup + return
+        result = {
+            # 4-way classification (baru)
+            "public_open":    list(set(public_open)),
+            "public_closed":  list(set(public_closed)),
+            "private_open":   list(set(private_open)),
+            "private_closed": list(set(private_closed)),
+
+            # Legacy 3-way (untuk backward compat)
+            "public":         list(set(public)),
+            "hidden":         list(set(hidden)),
+            "sensitive":      list(set(sensitive)),
         }
+        return result
 
     # =========================
     # 🧠 RESPONSE FINGERPRINTING
@@ -117,6 +163,13 @@ class EndpointClassifier:
         duplicate_groups = []
         warnings = {}
         seen_fingerprints = {}  # fingerprint -> url pertama
+        # BUG FIX: tambah 'processed' list untuk similarity check yang bersih.
+        # Sebelumnya, loop similarity ambil content dari scan_results berdasarkan
+        # seen_fingerprints.values() — logic ini bergantung pada state dict yang
+        # berubah mid-loop dan variabel 'processed' tidak pernah didefinisikan
+        # sehingga NameError. Ganti dengan list eksplisit yang diisi setelah
+        # setiap item selesai diproses.
+        processed = []  # list of {url, content} yang sudah diproses
 
         for item in scan_results:
             url = item.get("url")
@@ -144,24 +197,23 @@ class EndpointClassifier:
                 )
                 continue
 
-            # Cek similarity (soft duplicate)
+            # Cek similarity (soft duplicate) — bandingkan dengan semua item
+            # yang sudah selesai diproses, bukan seluruh scan_results sekaligus.
             similar_found = False
-            for seen_url, seen_content in [
-                (u, i.get("content", ""))
-                for i in scan_results
-                if i.get("url") in seen_fingerprints.values()
-                for u in [i.get("url")]
-            ]:
-                ratio = self.similarity_ratio(content, seen_content)
+            for prev in processed:
+                ratio = self.similarity_ratio(content, prev.get("content", ""))
                 if ratio >= threshold:
                     warnings[url] = (
-                        f"⚠️  Response sangat mirip ({ratio:.0%}) dengan: {seen_url}"
+                        f"⚠️  Response sangat mirip ({ratio:.0%}) dengan: {prev['url']}"
                     )
                     similar_found = True
                     break
 
             if fp:
                 seen_fingerprints[fp] = url
+
+            # Tambah ke processed setelah semua check selesai
+            processed.append({"url": url, "content": content})
 
             if not similar_found:
                 unique.append(url)
