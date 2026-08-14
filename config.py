@@ -1,6 +1,6 @@
-# ╔══════════════════════════════════════════════════════╗
-# ║           ShadowPath Configuration v1.5.0            ║
-# ╚══════════════════════════════════════════════════════╝
+# =========================================================
+#          ShadowPath Configuration v3.0.0
+# =========================================================
 
 # =========================
 # SOURCES (OSINT MODE)
@@ -17,6 +17,25 @@ GITLAB_TOKEN           = ""   # atau set env GITLAB_TOKEN
 BITBUCKET_USER         = ""
 BITBUCKET_APP_PASSWORD = ""
 BITBUCKET_WORKSPACE    = ""
+
+# =========================
+# CRAWL MODE (Real-Time)
+# =========================
+CRAWL_MAX_PAGES       = 100    # maksimum halaman yang di-crawl
+CRAWL_MAX_DEPTH       = 4      # kedalaman spider dari seed
+CRAWL_JS              = True   # ikut download dan parse JS external
+CRAWL_FOLLOW_SUBS     = False  # ikut crawl subdomain
+
+# =========================
+# STEALTH / EVASION
+# =========================
+# "fast"   -> 0.3-1.5s  (aggressive)
+# "normal" -> 1.0-4.0s  (recommended untuk CTF/bug bounty)
+# "slow"   -> 3.0-8.0s  (untuk target sensitif / production)
+# "random" -> mix acak
+STEALTH_TIMING        = "normal"
+STEALTH_ROTATE_UA     = True   # rotate UA setiap 8-20 request
+STEALTH_INTERLEAVE    = True   # sesekali request favicon/robots sbg noise
 
 # =========================
 # PASSIVE SCAN (OSINT)
