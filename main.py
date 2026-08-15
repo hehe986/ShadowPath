@@ -305,6 +305,8 @@ def run_crawl_scan(target: str, args) -> dict:
         follow_subdomains=args.follow_subs,
         timeout=config.REQUEST_TIMEOUT,
     )
+    # DEBUG: disable interleave sementara untuk isolate bug
+    scanner.crawler.session.interleave = False
 
     seed = args.seed or None
     Logger.info(f"Timing mode : {timing}")
