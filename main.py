@@ -236,7 +236,7 @@ def save_results(target: str, result: dict):
     json_payload = {
         "meta": {
             "tool":    "ShadowPath Hidden Endpoint Discovery Engine",
-            "version": "1.5.0",
+            "version": "1.6.0",
             "target":  target,
             "mode":    mode,
         },
