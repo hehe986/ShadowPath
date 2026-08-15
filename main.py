@@ -484,7 +484,7 @@ def _save_recon_results(result: dict):
 # =========================
 def main():
     parser = argparse.ArgumentParser(
-        description="ShadowPath v1.5.0 — Hidden Endpoint Discovery Engine",
+        description="ShadowPath v1.6.0 — Hidden Endpoint Discovery Engine",
         formatter_class=argparse.RawTextHelpFormatter,
     )
 
