@@ -12,6 +12,7 @@ from scanner.endpoint_scanner import EndpointScanner
 from scanner.parameter_scanner import ParameterScanner
 from scanner.active_scanner import ActiveScanner
 from scanner.crawl_scanner import CrawlScanner
+from scanner.recon_scanner import ReconScanner
 
 from filters.domain_filter import DomainFilter
 from filters.endpoint_filter import EndpointFilter
@@ -353,6 +354,132 @@ def run_crawl_scan(target: str, args) -> dict:
 
 
 # =========================
+# 🔎 RECON MODE (Subdomain + Crawl per subdomain)
+# =========================
+def run_recon_scan(target: str, args) -> dict:
+    Logger.section("RECON MODE — Full Reconnaissance")
+
+    timing = args.timing or config.STEALTH_TIMING
+
+    max_subs   = args.max_subs      or config.RECON_MAX_SUBS
+    pages_sub  = args.pages_per_sub or config.RECON_MAX_PAGES_PER_SUB
+    depth_sub  = args.depth_per_sub or config.RECON_MAX_DEPTH_PER_SUB
+    threads    = args.recon_threads or config.RECON_THREADS
+
+    bruteforce   = not args.no_bruteforce
+    permutation  = not args.no_permutation
+    crawl_each   = not args.no_crawl
+    skip_empty   = args.skip_empty or config.RECON_SKIP_EMPTY_HOSTS
+
+    Logger.info(f"Timing mode        : {timing}")
+    Logger.info(f"Max subdomains     : {max_subs}")
+    Logger.info(f"Pages per subdomain: {pages_sub}")
+    Logger.info(f"Depth per subdomain: {depth_sub}")
+    Logger.info(f"Bruteforce         : {bruteforce}")
+    Logger.info(f"Permutation        : {permutation}")
+    Logger.info(f"Crawl each         : {crawl_each}")
+    Logger.info(f"Skip empty hosts   : {skip_empty}")
+    print()
+
+    scanner = ReconScanner(
+        target_domain=target,
+        max_subs=max_subs,
+        max_pages_per_sub=pages_sub,
+        max_depth=depth_sub,
+        timing_mode=timing,
+        crawl_each=crawl_each,
+        bruteforce=bruteforce,
+        permutation=permutation,
+        threads=threads,
+        skip_empty=skip_empty,
+    )
+
+    try:
+        result = scanner.scan()
+    finally:
+        scanner.close()
+
+    # Save output per subdomain
+    _save_recon_results(result)
+    return result
+
+
+def _save_recon_results(result: dict):
+    """Save recon result ke file terpisah + JSON gabungan."""
+    import json, os
+    os.makedirs(config.RESULTS_DIR, exist_ok=True)
+
+    # 1. Subdomains list (plain text)
+    with open(config.SUBDOMAINS_FILE, "w", encoding="utf-8") as f:
+        f.write(f"# ShadowPath - Subdomain Enumeration Results\n")
+        f.write(f"# Target: {result['target']}\n")
+        f.write(f"# Total found: {result['enum']['stats']['total_found']}\n")
+        f.write(f"# Live: {result['enum']['stats']['live_count']}\n\n")
+
+        f.write("=" * 60 + "\n[LIVE SUBDOMAINS]\n" + "=" * 60 + "\n")
+        for detail in result["enum"]["live_details"]:
+            if detail["status"] == "live":
+                f.write(f"{detail['host']:<50} [{detail.get('server','?')}] {detail.get('title','')[:60]}\n")
+
+        f.write("\n" + "=" * 60 + "\n[REACHABLE_EMPTY SUBDOMAINS]\n" + "=" * 60 + "\n")
+        for detail in result["enum"]["live_details"]:
+            if detail["status"] == "reachable_empty":
+                f.write(f"{detail['host']:<50} {detail.get('reason','')[:60]}\n")
+
+        f.write("\n" + "=" * 60 + "\n[DNS_ONLY SUBDOMAINS]\n" + "=" * 60 + "\n")
+        for detail in result["enum"]["live_details"]:
+            if detail["status"] == "dns_only":
+                f.write(f"{detail['host']}\n")
+
+    Logger.success(f"Saved: {config.SUBDOMAINS_FILE}")
+
+    # 2. Endpoints per subdomain (categorized)
+    agg = result["aggregated"]
+    with open(config.ENDPOINTS_FILE, "w", encoding="utf-8") as f:
+        f.write(f"# ShadowPath - Recon Endpoint Discovery Results\n")
+        f.write(f"# Target: {result['target']}\n")
+        f.write(f"# Total endpoints: {agg['total_endpoints']}\n\n")
+
+        sections = [
+            ("all_private_open",   "[PRIVATE-OPEN]   Endpoint sensitif TERBUKA - prioritas tinggi"),
+            ("all_public_open",    "[PUBLIC-OPEN]    Endpoint umum, accessible"),
+            ("all_private_closed", "[PRIVATE-CLOSED] Endpoint sensitif tertutup (401/403)"),
+            ("all_public_closed",  "[PUBLIC-CLOSED]  Endpoint umum tidak accessible (404)"),
+        ]
+
+        for key, title in sections:
+            items = agg.get(key, [])
+            f.write("=" * 70 + f"\n{title} ({len(items)})\n" + "=" * 70 + "\n")
+            for url in items:
+                f.write(f"{url}\n")
+            f.write("\n")
+
+        # Per subdomain breakdown
+        f.write("\n" + "=" * 70 + "\n[BREAKDOWN PER SUBDOMAIN]\n" + "=" * 70 + "\n")
+        for host, data in result["subdomains"].items():
+            eps = data.get("endpoints", {})
+            total = sum(len(v) for v in eps.values())
+            f.write(f"\n--- {host} ({total} endpoints) ---\n")
+            for cat, urls in eps.items():
+                if urls:
+                    f.write(f"  [{cat}] {len(urls)} endpoints\n")
+                    for u in urls[:10]:
+                        f.write(f"    {u}\n")
+                    if len(urls) > 10:
+                        f.write(f"    ... +{len(urls) - 10} more\n")
+
+    Logger.success(f"Saved: {config.ENDPOINTS_FILE}")
+
+    # 3. Full JSON (untuk parsing programmatic)
+    try:
+        with open(config.RECON_FILE, "w", encoding="utf-8") as f:
+            json.dump(result, f, indent=2, default=str, ensure_ascii=False)
+        Logger.success(f"Saved: {config.RECON_FILE}")
+    except Exception as e:
+        Logger.warn(f"JSON save error: {e}")
+
+
+# =========================
 # 🚀 MAIN
 # =========================
 def main():
@@ -419,6 +546,36 @@ def main():
         action="store_true",
         help="Ikut crawl subdomain dari target domain")
 
+    # ── RECON MODE ──
+    recon_grp = parser.add_argument_group("Recon Mode (--recon)")
+    recon_grp.add_argument("--recon",
+        action="store_true",
+        help="Full recon: enum subdomain + crawl per subdomain + classify 4-way")
+    recon_grp.add_argument("--max-subs",
+        type=int, default=0,
+        help=f"Maks subdomain di-enum (default: {config.RECON_MAX_SUBS})")
+    recon_grp.add_argument("--pages-per-sub",
+        type=int, default=0,
+        help=f"Maks halaman crawl per subdomain (default: {config.RECON_MAX_PAGES_PER_SUB})")
+    recon_grp.add_argument("--depth-per-sub",
+        type=int, default=0,
+        help=f"Kedalaman crawl per subdomain (default: {config.RECON_MAX_DEPTH_PER_SUB})")
+    recon_grp.add_argument("--recon-threads",
+        type=int, default=0,
+        help=f"Thread untuk enum (default: {config.RECON_THREADS})")
+    recon_grp.add_argument("--no-bruteforce",
+        action="store_true",
+        help="Skip DNS bruteforce, hanya passive")
+    recon_grp.add_argument("--no-permutation",
+        action="store_true",
+        help="Skip permutation dari found subdomains")
+    recon_grp.add_argument("--no-crawl",
+        action="store_true",
+        help="Hanya list subdomain, skip crawl endpoint per subdomain")
+    recon_grp.add_argument("--skip-empty",
+        action="store_true",
+        help="Skip crawl subdomain yang REACHABLE_EMPTY (hanya LIVE)")
+
     args = parser.parse_args()
 
     # Setup
@@ -436,7 +593,9 @@ def main():
         return
 
     Logger.info(f"Target  : {target}")
-    if args.crawl:
+    if args.recon:
+        mode_label = "RECON"
+    elif args.crawl:
         mode_label = "CRAWL"
     elif args.active:
         mode_label = "ACTIVE"
@@ -450,7 +609,9 @@ def main():
     start_time = time.time()
 
     # ── RUN ──
-    if args.crawl:
+    if args.recon:
+        result = run_recon_scan(target, args)
+    elif args.crawl:
         result = run_crawl_scan(target, args)
     elif args.active:
         result = run_active_scan(target, args)
@@ -460,7 +621,8 @@ def main():
     elapsed = time.time() - start_time
 
     # ── SAVE ──
-    if config.SAVE_RESULTS and result:
+    # Recon mode punya save handler sendiri (_save_recon_results)
+    if config.SAVE_RESULTS and result and not args.recon:
         save_results(target, result)
 
     Logger.success(f"Scan completed in {elapsed:.1f}s")
