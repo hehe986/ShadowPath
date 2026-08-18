@@ -416,6 +416,12 @@ class StealthSession:
         except requests.exceptions.RequestException as e:
             self.stats["failed"] += 1
             return {"url": url, "status_code": None, "error": str(e), "content": ""}
+        except Exception as e:
+            self.stats["failed"] += 1
+            print(f"[DEBUG] Unexpected: {type(e).__name__} - {e}")
+            import traceback
+            traceback.print_exc()
+            return {"url": url, "status_code": None, "error": str(e), "content": ""}
 
     def close(self):
         self._session.close()
