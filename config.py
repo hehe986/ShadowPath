@@ -48,7 +48,7 @@ STEALTH_INTERLEAVE    = True
 # PASSIVE SCAN (OSINT)
 # =========================
 VALIDATE_ENDPOINTS       = True
-REQUEST_TIMEOUT          = 10
+REQUEST_TIMEOUT          = 15
 DELAY_BETWEEN_REQUESTS   = 1
 
 # =========================
