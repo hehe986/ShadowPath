@@ -154,7 +154,7 @@ class WebCrawler:
                  timing_mode: str = "normal",
                  crawl_js: bool = True,
                  follow_subdomains: bool = False,
-                 timeout: int = 10):
+                 timeout: int = 15):
         """
         Args:
             target_domain: domain target, misal 'example.com'
@@ -187,6 +187,7 @@ class WebCrawler:
         self._js_visited: set[str] = set()
         self._queue: deque = deque()  # (url, depth) — gunakan len() bukan qsize()
         self._pages_crawled = 0
+        self._scheme = "https"  # resolved saat crawl() dipanggil (HTTPS/HTTP fallback)
 
         # Output
         self.found_urls:     set[str]  = set()   # semua URL yang ditemukan
@@ -208,15 +209,23 @@ class WebCrawler:
           urls, endpoints, forms, scripts, raw_pages, stats
         """
         if not seed_url:
-            seed_url = f"https://{self.target}/"
+            # Auto-resolve scheme: test HTTPS dulu, fallback ke HTTP kalau gagal.
+            # Banyak target lama (termasuk test target) cuma serve di HTTP port 80,
+            # kalau langsung pakai HTTPS bakal timeout dan crawl 0 hasil.
+            self._scheme = self._resolve_scheme()
+            seed_url = f"{self._scheme}://{self.target}/"
+        else:
+            # Ambil scheme dari seed yang diberikan user
+            from urllib.parse import urlparse as _up
+            self._scheme = _up(seed_url).scheme or "https"
 
         # Normalize seed
         seed_url = self._normalize_url(seed_url)
         Logger.info(f"Starting crawl: {seed_url}")
         Logger.info(f"Max pages: {self.max_pages}, Max depth: {self.max_depth}")
 
-        # Tambah robots.txt dan sitemap sebagai seed tambahan
-        base = f"https://{self.target}"
+        # Tambah robots.txt dan sitemap sebagai seed tambahan (pakai scheme yang resolved)
+        base = f"{self._scheme}://{self.target}"
         for extra in ["/robots.txt", "/sitemap.xml", "/sitemap_index.xml"]:
             self._queue.append((base + extra, 0))
 
@@ -247,6 +256,30 @@ class WebCrawler:
     # =============================================================
     # 📄 CRAWL SINGLE PAGE
     # =============================================================
+    def _resolve_scheme(self) -> str:
+        """
+        Tentukan scheme yang benar untuk target: HTTPS dulu, fallback HTTP.
+
+        Banyak target (terutama aplikasi lama / test target) hanya serve di
+        HTTP port 80. Kalau crawler langsung ngotot HTTPS, semua request
+        timeout dan hasil crawl 0. Method ini test HTTPS sekali; kalau gagal,
+        pakai HTTP.
+        """
+        https_url = f"https://{self.target}/"
+        result = self.session.get(https_url, skip_delay=True)
+        if result and result.get("status_code"):
+            return "https"
+
+        http_url = f"http://{self.target}/"
+        result = self.session.get(http_url, skip_delay=True)
+        if result and result.get("status_code"):
+            Logger.warn(f"HTTPS gagal, menggunakan HTTP untuk {self.target}")
+            return "http"
+
+        # Dua-duanya gagal — default ke https (nanti error di-handle downstream)
+        Logger.warn(f"HTTPS & HTTP dua-duanya gagal untuk {self.target}")
+        return "https"
+
     def _crawl_page(self, url: str, depth: int):
         self._pages_crawled += 1
         Logger.info(f"[{self._pages_crawled}/{self.max_pages}] Crawling (d={depth}): {url}")
@@ -352,7 +385,7 @@ class WebCrawler:
     # =============================================================
     def _parse_robots(self, content: str, base_url: str):
         """Extract path dari robots.txt (Allow + Disallow)."""
-        base = f"https://{self.target}"
+        base = f"{self._scheme}://{self.target}"
         for line in content.splitlines():
             line = line.strip()
             if line.lower().startswith(("disallow:", "allow:", "sitemap:")):
