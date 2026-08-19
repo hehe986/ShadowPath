@@ -260,7 +260,7 @@ class StealthSession:
     def __init__(self,
                  timing_mode: str = "normal",
                  verify_ssl: bool = False,
-                 timeout: int = 10,
+                 timeout: int = 15,
                  rotate_ua: bool = True,
                  interleave: bool = True):
         """
@@ -407,23 +407,21 @@ class StealthSession:
                 "headers":        dict(resp.headers),
             }
 
-        except requests.exceptions.Timeout as e:
+        except requests.exceptions.Timeout:
             self.stats["failed"] += 1
-            print(f"[DEBUG] Timeout: {url} - {e}")
+            self.stats.setdefault("errors", {})["timeout"] = self.stats.get("errors", {}).get("timeout", 0) + 1
             return {"url": url, "status_code": None, "error": "timeout", "content": ""}
-        except requests.exceptions.ConnectionError as e:
+        except requests.exceptions.ConnectionError:
             self.stats["failed"] += 1
-            print(f"[DEBUG] ConnectionError: {url} - {e}")
+            self.stats.setdefault("errors", {})["connection_error"] = self.stats.get("errors", {}).get("connection_error", 0) + 1
             return {"url": url, "status_code": None, "error": "connection_error", "content": ""}
         except requests.exceptions.RequestException as e:
             self.stats["failed"] += 1
-            print(f"[DEBUG] RequestException: {type(e).__name__} - {e}")
+            self.stats.setdefault("errors", {})[type(e).__name__] = self.stats.get("errors", {}).get(type(e).__name__, 0) + 1
             return {"url": url, "status_code": None, "error": str(e), "content": ""}
         except Exception as e:
             self.stats["failed"] += 1
-            print(f"[DEBUG] Unexpected: {type(e).__name__} - {e}")
-            import traceback
-            traceback.print_exc()
+            self.stats.setdefault("errors", {})[type(e).__name__] = self.stats.get("errors", {}).get(type(e).__name__, 0) + 1
             return {"url": url, "status_code": None, "error": str(e), "content": ""}
 
     def close(self):
@@ -441,3 +439,9 @@ class StealthSession:
         print("  Status breakdown:")
         for code, count in sorted(s["by_status"].items()):
             print(f"    [{code}] {count}x")
+        # Error breakdown — kalau ada failed request, tampilkan penyebabnya
+        errors = s.get("errors", {})
+        if errors:
+            print("  Error breakdown:")
+            for err_type, count in sorted(errors.items()):
+                print(f"    {err_type}: {count}x")
