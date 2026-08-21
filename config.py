@@ -1,5 +1,5 @@
 # =========================================================
-#          ShadowPath Configuration v1.6.0
+#          ShadowPath Configuration v2.0.0
 # =========================================================
 
 # =========================
@@ -94,6 +94,24 @@ PARAMETERS_FILE = f"{RESULTS_DIR}/parameters.txt"
 JSON_FILE       = f"{RESULTS_DIR}/scan_results.json"
 SUBDOMAINS_FILE = f"{RESULTS_DIR}/subdomains.txt"
 RECON_FILE      = f"{RESULTS_DIR}/recon_results.json"
+HTML_REPORT     = f"{RESULTS_DIR}/report.html"
+
+# =========================
+# TECH FINGERPRINT
+# =========================
+TECH_FINGERPRINT = True   # deteksi teknologi target dari header + HTML
+
+# =========================
+# HTML REPORT
+# =========================
+GENERATE_HTML_REPORT = True   # generate report.html interaktif
+
+# =========================
+# NOTIFICATION (opsional, isi via env atau di sini)
+# =========================
+DISCORD_WEBHOOK_URL  = ""     # https://discord.com/api/webhooks/...
+TELEGRAM_BOT_TOKEN   = ""     # dari @BotFather
+TELEGRAM_CHAT_ID     = ""     # chat/channel ID
 
 # =========================
 # DEBUG
