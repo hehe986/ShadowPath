@@ -236,7 +236,7 @@ def save_results(target: str, result: dict):
     json_payload = {
         "meta": {
             "tool":    "ShadowPath Hidden Endpoint Discovery Engine",
-            "version": "1.6.0",
+            "version": "2.0.0",
             "target":  target,
             "mode":    mode,
         },
@@ -486,12 +486,12 @@ def _save_recon_results(result: dict):
 # =========================
 def main():
     parser = argparse.ArgumentParser(
-        description="ShadowPath v1.6.0 — Hidden Endpoint Discovery Engine",
+        description="ShadowPath v2.0.0 — Hidden Endpoint Discovery Engine",
         formatter_class=argparse.RawTextHelpFormatter,
     )
 
     parser.add_argument("-d", "--domain",
-        required=True,
+        required=False, default="",
         help="Target domain (e.g. example.com)")
     parser.add_argument("-k", "--token",
         default="",
@@ -518,6 +518,21 @@ def main():
     parser.add_argument("--debug",
         action="store_true",
         help="Enable debug output")
+
+    # ── OUTPUT & NOTIFICATION ──
+    out_grp = parser.add_argument_group("Output & Notification")
+    out_grp.add_argument("--no-html",
+        action="store_true",
+        help="Skip generate HTML report")
+    out_grp.add_argument("--no-notify",
+        action="store_true",
+        help="Skip kirim notifikasi (Discord/Telegram)")
+    out_grp.add_argument("--discord",
+        default="",
+        help="Discord webhook URL (override config)")
+    out_grp.add_argument("--notify-test",
+        action="store_true",
+        help="Test koneksi notifikasi lalu keluar")
 
     # ── CRAWL MODE ──
     crawl_grp = parser.add_argument_group("Crawl Mode (--crawl)")
@@ -588,7 +603,22 @@ def main():
 
     show_banner()
 
+    # ── NOTIFY TEST ──
+    if args.notify_test:
+        import os
+        from core.notifier import Notifier
+        discord = args.discord or os.environ.get("DISCORD_WEBHOOK_URL", "") or config.DISCORD_WEBHOOK_URL
+        tg_token = os.environ.get("TELEGRAM_BOT_TOKEN", "") or config.TELEGRAM_BOT_TOKEN
+        tg_chat = os.environ.get("TELEGRAM_CHAT_ID", "") or config.TELEGRAM_CHAT_ID
+        notifier = Notifier(discord, tg_token, tg_chat)
+        Logger.info("Testing notification channels...")
+        notifier.test_connection()
+        return
+
     # Validasi domain
+    if not args.domain:
+        Logger.error("Domain wajib diisi: -d <domain>")
+        return
     target = normalize_domain(args.domain)
     if not is_valid_domain(target):
         Logger.error(f"Domain tidak valid: {target}")
@@ -627,7 +657,84 @@ def main():
     if config.SAVE_RESULTS and result and not args.recon:
         save_results(target, result)
 
+    # ── HTML REPORT ──
+    if result and getattr(config, "GENERATE_HTML_REPORT", False) and not args.no_html:
+        try:
+            from utils.html_report import HTMLReport
+            import os
+            os.makedirs(config.RESULTS_DIR, exist_ok=True)
+            report = HTMLReport()
+            report.generate(result, config.HTML_REPORT)
+            Logger.success(f"HTML report: {config.HTML_REPORT}")
+        except Exception as e:
+            Logger.warn(f"HTML report error: {e}")
+
+    # ── NOTIFICATION ──
+    if result and not args.no_notify:
+        try:
+            _send_notification(target, result, elapsed, args)
+        except Exception as e:
+            Logger.warn(f"Notification error: {e}")
+
     Logger.success(f"Scan completed in {elapsed:.1f}s")
+
+
+def _send_notification(target, result, elapsed, args):
+    """Kirim notifikasi hasil scan kalau webhook dikonfigurasi."""
+    import os
+    from core.notifier import Notifier
+
+    discord = args.discord or os.environ.get("DISCORD_WEBHOOK_URL", "") or config.DISCORD_WEBHOOK_URL
+    tg_token = os.environ.get("TELEGRAM_BOT_TOKEN", "") or config.TELEGRAM_BOT_TOKEN
+    tg_chat = os.environ.get("TELEGRAM_CHAT_ID", "") or config.TELEGRAM_CHAT_ID
+
+    notifier = Notifier(discord_webhook=discord,
+                        telegram_token=tg_token,
+                        telegram_chat_id=tg_chat)
+    if not notifier.enabled:
+        return
+
+    # Build summary dari result
+    mode = result.get("mode", "scan")
+    summary = {"target": target, "mode": mode, "elapsed": f"{elapsed:.1f}s"}
+
+    if mode == "recon":
+        agg = result.get("aggregated", {})
+        enum_stats = result.get("enum", {}).get("stats", {})
+        summary["subdomains"] = {
+            "total": enum_stats.get("total_found", 0),
+            "live": enum_stats.get("live_count", 0),
+        }
+        summary["endpoints"] = {
+            "private_open": len(agg.get("all_private_open", [])),
+            "public_open": len(agg.get("all_public_open", [])),
+            "private_closed": len(agg.get("all_private_closed", [])),
+            "public_closed": len(agg.get("all_public_closed", [])),
+        }
+        summary["parameters"] = {
+            "total": len(agg.get("all_parameters", [])),
+            "sensitive": len(agg.get("all_sensitive_params", [])),
+        }
+        summary["top_findings"] = agg.get("all_private_open", [])[:5]
+    else:
+        c = result.get("classified", {})
+        summary["endpoints"] = {
+            "private_open": len(c.get("private_open", [])),
+            "public_open": len(c.get("public_open", [])),
+            "private_closed": len(c.get("private_closed", [])),
+            "public_closed": len(c.get("public_closed", [])),
+        }
+        p = result.get("parameters", {})
+        summary["parameters"] = {
+            "total": p.get("total", 0),
+            "sensitive": len(p.get("sensitive", [])),
+        }
+        summary["top_findings"] = c.get("private_open", [])[:5]
+        if result.get("tech"):
+            from core.tech_fingerprint import TechFingerprint
+            summary["tech"] = TechFingerprint().summarize(result["tech"])
+
+    notifier.notify_scan_complete(summary)
 
 
 if __name__ == "__main__":
