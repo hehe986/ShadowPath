@@ -209,8 +209,31 @@ class CrawlScanner:
         self._print_inline(classified, dup_analysis, scored, param_data,
                            live_check_data)
 
+        # ── TECH FINGERPRINT ───────────────────────────────────
+        tech = {}
+        try:
+            from core.tech_fingerprint import TechFingerprint
+            fp = TechFingerprint()
+            # Analisa dari target_check headers + raw pages
+            fp_responses = []
+            if target_check.get("headers"):
+                fp_responses.append({
+                    "headers": target_check["headers"],
+                    "content": raw_pages.get(list(raw_pages.keys())[0], "") if raw_pages else "",
+                })
+            # Tambah beberapa raw pages untuk deteksi JS lib
+            for url, content in list(raw_pages.items())[:5]:
+                fp_responses.append({"headers": {}, "content": content})
+            tech = fp.analyze_multiple(fp_responses)
+            if tech:
+                Logger.section("TECH FINGERPRINT")
+                print(f"  {fp.summarize(tech)}")
+        except Exception as e:
+            Logger.warn(f"Tech fingerprint error: {e}")
+
         return {
             "mode":             "crawl",
+            "target":           self.target,
             "target_check":     target_check,
             "live_hosts":       live_check_data,
             "classified":       classified,
@@ -218,6 +241,7 @@ class CrawlScanner:
             "scored":           scored[:20],
             "parameters":       param_data,
             "forms":            forms,
+            "tech":             tech,
             "urls":             list(crawl_result.get("urls", [])),
             "crawl_stats":      crawl_stats,
             "raw":              validated,
