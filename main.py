@@ -236,7 +236,7 @@ def save_results(target: str, result: dict):
     json_payload = {
         "meta": {
             "tool":    "ShadowPath Hidden Endpoint Discovery Engine",
-            "version": "2.0.0",
+            "version": "2.1.0",
             "target":  target,
             "mode":    mode,
         },
@@ -304,9 +304,8 @@ def run_crawl_scan(target: str, args) -> dict:
         crawl_js=not args.no_js,
         follow_subdomains=args.follow_subs,
         timeout=config.REQUEST_TIMEOUT,
+        spa_mode=args.spa or config.SPA_MODE,
     )
-    # DEBUG: disable interleave sementara untuk isolate bug
-    scanner.crawler.session.interleave = False
 
     seed = args.seed or None
     Logger.info(f"Timing mode : {timing}")
@@ -486,7 +485,7 @@ def _save_recon_results(result: dict):
 # =========================
 def main():
     parser = argparse.ArgumentParser(
-        description="ShadowPath v2.0.0 — Hidden Endpoint Discovery Engine",
+        description="ShadowPath v2.1.0 — Hidden Endpoint Discovery Engine",
         formatter_class=argparse.RawTextHelpFormatter,
     )
 
@@ -562,6 +561,10 @@ def main():
     crawl_grp.add_argument("--follow-subs",
         action="store_true",
         help="Ikut crawl subdomain dari target domain")
+    crawl_grp.add_argument("--spa",
+        default="", choices=["off", "auto", "on"],
+        help="SPA rendering (butuh Playwright): off=HTTP saja, "
+             "auto=render kalau kedeteksi SPA [default], on=selalu browser")
 
     # ── RECON MODE ──
     recon_grp = parser.add_argument_group("Recon Mode (--recon)")
