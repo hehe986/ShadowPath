@@ -47,11 +47,41 @@ class EndpointClassifier:
         """Cek apakah URL cocok whitelist publik (walau ada keyword sensitif)."""
         return any(w in url_lower for w in self.public_whitelist)
 
+    def _is_public_role_login(self, url_lower: str) -> bool:
+        """
+        Deteksi login untuk ROLE USER UMUM (siswa/ortu/alumni/wali/murid).
+        Login jenis ini di-tag public sesuai preferensi: bukan area staf internal.
+
+        Login admin/guru/staf TIDAK termasuk di sini (tetap private).
+        Contoh yang cocok:
+          /login?p=siswa   /login?p=ortu   /siswa/login   /portal-alumni/login
+        """
+        # Harus mengandung indikasi login dulu
+        has_login = any(x in url_lower for x in ("login", "signin", "masuk", "auth"))
+        if not has_login:
+            return False
+
+        # Role user umum (public)
+        public_roles = ["siswa", "murid", "ortu", "orangtua", "orang-tua",
+                        "wali", "alumni", "student", "parent"]
+        # Role internal (tetap private) — kalau ada ini, JANGAN public
+        internal_roles = ["admin", "guru", "staff", "staf", "operator",
+                          "pegawai", "kepala", "teacher", "administrator"]
+
+        has_public_role   = any(r in url_lower for r in public_roles)
+        has_internal_role = any(r in url_lower for r in internal_roles)
+
+        # Public hanya kalau ada role umum DAN tidak ada role internal
+        return has_public_role and not has_internal_role
+
     # =========================
     # 🔹 KEYWORD CLASSIFICATION (OSINT)
     # =========================
     def classify(self, endpoint):
         ep = endpoint.lower()
+        # Login role user umum (siswa/ortu/alumni) → public
+        if self._is_public_role_login(ep):
+            return "public"
         if self._is_whitelisted(ep):
             return "public"
         if self._has_keyword(ep, self.sensitive_keywords):
@@ -165,8 +195,9 @@ class EndpointClassifier:
                 continue
 
             # ── STEP 1: Tentukan sifat endpoint (public vs private) ──
-            is_sensitive = (not self._is_whitelisted(url_lower)) and self._has_keyword(url_lower, self.sensitive_keywords)
-            is_hidden    = (not self._is_whitelisted(url_lower)) and self._has_keyword(url_lower, self.hidden_keywords)
+            _public_ctx  = self._is_whitelisted(url_lower) or self._is_public_role_login(url_lower)
+            is_sensitive = (not _public_ctx) and self._has_keyword(url_lower, self.sensitive_keywords)
+            is_hidden    = (not _public_ctx) and self._has_keyword(url_lower, self.hidden_keywords)
             is_private   = is_sensitive or is_hidden
 
             # ── STEP 2: Tentukan aksesibilitas (open vs closed) ──
