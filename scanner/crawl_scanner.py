@@ -41,7 +41,8 @@ class CrawlScanner:
                  crawl_js: bool = True,
                  follow_subdomains: bool = False,
                  timeout: int = 10,
-                 verify_liveness: bool = True):
+                 verify_liveness: bool = True,
+                 spa_mode: str = "auto"):
 
         self.target           = target_domain
         self.validate_enabled = validate
@@ -56,6 +57,7 @@ class CrawlScanner:
             crawl_js=crawl_js,
             follow_subdomains=follow_subdomains,
             timeout=timeout,
+            spa_mode=spa_mode,
         )
         self.extractor      = EndpointExtractor()
         self.param_extractor = ParameterExtractor()
