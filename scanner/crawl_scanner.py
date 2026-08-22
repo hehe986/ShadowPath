@@ -104,6 +104,10 @@ class CrawlScanner:
         print()
 
         # ── STEP 1: CRAWL ──────────────────────────────────────
+        # Oper scheme yang sudah terverifikasi dari liveness check ke crawler,
+        # supaya crawler tidak probe HTTPS/HTTP ulang (hindari "1 failed" palsu).
+        if target_check.get("scheme"):
+            self.crawler._known_scheme = target_check["scheme"]
         Logger.info("Phase 1: Crawling target...")
         crawl_result = self.crawler.crawl(seed_url)
         crawl_stats  = crawl_result["stats"]
