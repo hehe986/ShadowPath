@@ -171,13 +171,21 @@ class OutputFormatter:
             print()
 
         cats = param_data.get("by_category", {})
+        cat_labels = {
+            "auth":    "🔑 AUTH / TOKEN",
+            "id":      "🆔 IDENTIFIER",
+            "file":    "📁 FILE / PATH",
+            "debug":   "🐛 DEBUG / TEST",
+            "general": "GENERAL",
+        }
         for cat, params in cats.items():
             if not params:
                 continue
             non_sensitive = [p for p in params if p not in sensitive]
             if not non_sensitive:
                 continue
-            print(f"  [{cat.upper()}]")
+            label = cat_labels.get(cat, cat.upper())
+            print(f"  [{label}]")
             for p in sorted(non_sensitive):
                 print(f"    - {p}")
             print()
