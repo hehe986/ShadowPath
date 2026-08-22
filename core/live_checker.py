@@ -150,6 +150,8 @@ class LiveChecker:
             "server":         "",
             "reason":         "",
             "final_url":      "",
+            "headers":        {},
+            "content":        "",
         }
 
         # ── STEP 1: DNS ──
@@ -185,6 +187,8 @@ class LiveChecker:
             result["fingerprint"]    = fp
             result["server"]         = probe.get("server", "")
             result["final_url"]      = final_url
+            result["headers"]        = probe.get("headers", {})
+            result["content"]        = content
 
             # Extract title
             title_match = re.search(r'<title[^>]*>(.*?)</title>',
