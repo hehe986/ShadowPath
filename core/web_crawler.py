@@ -155,7 +155,8 @@ class WebCrawler:
                  crawl_js: bool = True,
                  follow_subdomains: bool = False,
                  timeout: int = 15,
-                 known_scheme: str = ""):
+                 known_scheme: str = "",
+                 spa_mode: str = "auto"):
         """
         Args:
             target_domain: domain target, misal 'example.com'
@@ -167,6 +168,9 @@ class WebCrawler:
             timeout: HTTP timeout per request
             known_scheme: scheme yang sudah diketahui (http/https) dari liveness
                           check sebelumnya — kalau diisi, skip probe HTTPS/HTTP
+            spa_mode: "off"  = HTTP saja (tercepat, ga bisa SPA)
+                      "auto" = HTTP dulu, auto-switch ke browser kalau kedeteksi SPA
+                      "on"   = selalu pakai browser (paling lengkap, paling lambat)
         """
         self.target       = target_domain.lower().strip()
         self.max_pages    = max_pages
@@ -174,6 +178,7 @@ class WebCrawler:
         self.crawl_js     = crawl_js
         self.timeout      = timeout
         self._known_scheme = known_scheme  # dari LiveChecker, skip probe kalau ada
+        self.spa_mode     = spa_mode
 
         self.session      = StealthSession(
             timing_mode=timing_mode,
@@ -186,12 +191,17 @@ class WebCrawler:
         )
         self.ep_extractor  = EndpointExtractor()
 
+        # Browser renderer (lazy-init saat dibutuhkan)
+        self._renderer = None
+        self._renderer_started = False
+
         # State
         self._visited:    set[str] = set()
         self._js_visited: set[str] = set()
         self._queue: deque = deque()  # (url, depth) — gunakan len() bukan qsize()
         self._pages_crawled = 0
         self._scheme = "https"  # resolved saat crawl() dipanggil (HTTPS/HTTP fallback)
+        self._spa_rendered = 0   # berapa halaman yang di-render via browser
 
         # Output
         self.found_urls:     set[str]  = set()   # semua URL yang ditemukan
@@ -255,10 +265,11 @@ class WebCrawler:
             self._visited.add(url)
             self._crawl_page(url, depth)
 
+        spa_note = f", SPA-rendered: {self._spa_rendered}" if self._spa_rendered else ""
         Logger.success(
             f"Crawl complete — pages: {self._pages_crawled}, "
             f"URLs found: {len(self.found_urls)}, "
-            f"Endpoints: {len(self.found_endpoints)}"
+            f"Endpoints: {len(self.found_endpoints)}{spa_note}"
         )
 
         return self._build_result()
@@ -333,12 +344,89 @@ class WebCrawler:
     # =============================================================
     # 🌐 PROCESS HTML
     # =============================================================
+    def _ensure_renderer(self) -> bool:
+        """Lazy-init browser renderer. Return True kalau siap dipakai."""
+        if self._renderer_started:
+            return self._renderer is not None
+        self._renderer_started = True
+        try:
+            from core.browser_renderer import BrowserRenderer
+            if not BrowserRenderer.is_available():
+                Logger.warn("SPA terdeteksi tapi Playwright belum terinstall.")
+                Logger.warn("Install: pip install playwright && playwright install chromium")
+                self._renderer = None
+                return False
+            r = BrowserRenderer(timeout=self.timeout, wait_after_load=2.0)
+            if r.start():
+                self._renderer = r
+                Logger.success("Browser renderer aktif (SPA mode)")
+                return True
+            self._renderer = None
+            return False
+        except Exception as e:
+            Logger.warn(f"Gagal init browser renderer: {e}")
+            self._renderer = None
+            return False
+
+    def _render_spa(self, url: str, depth: int) -> bool:
+        """Render halaman SPA pakai browser. Return True kalau berhasil."""
+        if not self._ensure_renderer():
+            return False
+
+        Logger.info(f"  \u21b3 Rendering SPA via browser: {url}")
+        rendered = self._renderer.render(url)
+        if rendered.get("error"):
+            Logger.warn(f"  \u21b3 Browser render error: {rendered['error'][:80]}")
+            return False
+
+        self._spa_rendered += 1
+        html = rendered.get("html", "")
+        if html:
+            self.raw_pages[url] = html
+
+        # Link dari DOM hasil render
+        for link in rendered.get("links", []):
+            norm = self._normalize_url(link)
+            if norm and norm not in self._visited:
+                if self.domain_filter.is_valid(norm):
+                    self.found_urls.add(norm)
+                    self._queue.append((norm, depth + 1))
+
+        # API endpoints dari network capture (XHR/fetch) — emas untuk SPA
+        for api_url in rendered.get("api_endpoints", []):
+            norm = self._normalize_url(api_url)
+            if norm and self.domain_filter.is_valid(norm):
+                self.found_urls.add(norm)
+                self.found_endpoints.add(norm)
+
+        # Extract endpoint dari HTML hasil render
+        for ep in self.ep_extractor.extract_from_text(html):
+            full = self._to_full_url(ep, url)
+            if full:
+                self.found_endpoints.add(full)
+
+        Logger.success(
+            f"  \u21b3 SPA rendered: {len(rendered.get('links', []))} links, "
+            f"{len(rendered.get('api_endpoints', []))} API calls"
+        )
+        return True
+
     def _process_html(self, url: str, content: str, depth: int):
         parser = _LinkParser(base_url=url)
         try:
             parser.feed(content)
         except Exception:
             pass
+
+        # ── SPA DETECTION & RENDERING ──
+        # Kalau HTTP crawl dapat konten tapi 0 link, kemungkinan SPA (konten
+        # di-render JavaScript). Render pakai headless browser.
+        need_browser = (
+            self.spa_mode == "on" or
+            (self.spa_mode == "auto" and len(parser.links) == 0 and len(content) > 500)
+        )
+        if need_browser and self._render_spa(url, depth):
+            return  # sudah di-handle browser renderer
 
         # Tambah semua link ke queue
         for link in parser.links:
@@ -520,3 +608,8 @@ class WebCrawler:
 
     def close(self):
         self.session.close()
+        if self._renderer:
+            try:
+                self._renderer.stop()
+            except Exception:
+                pass
