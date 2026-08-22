@@ -42,6 +42,7 @@ class EndpointFilter:
     # =========================
     def is_valid(self, endpoint: str) -> bool:
         ep = endpoint.strip().lower()
+        ep_orig = endpoint.strip()  # versi asli (case dipertahankan untuk deteksi junk)
 
         if len(ep) < self.min_length:
             return False
@@ -66,16 +67,36 @@ class EndpointFilter:
         if not re.search(r'[a-zA-Z0-9]', ep):
             return False
 
-        # Filter ViewState / base64 junk:
-        # segment path yang sangat panjang (>60 char) tanpa titik/slash internal
-        # dan campuran acak huruf besar-kecil+angka = kemungkinan besar token,
-        # bukan endpoint asli (misal __VIEWSTATE ASP.NET yang ke-parse jadi URL).
-        last_segment = path_no_query.rstrip("/").split("/")[-1]
-        if len(last_segment) > 60:
-            # Hitung rasio karakter "acak" (base64-like tanpa ekstensi file)
-            has_ext = "." in last_segment[-6:]  # ada ekstensi di ujung?
-            if not has_ext and re.match(r'^[a-zA-Z0-9+/=_-]+$', last_segment):
-                return False
+        # Filter ViewState / base64 junk (Opsi C - robust):
+        # Junk seperti __VIEWSTATE ASP.NET yang salah ke-parse jadi URL punya ciri:
+        #   - path total sangat panjang (>50 char)
+        #   - didominasi karakter base64 tanpa struktur URL yang wajar
+        #   - tidak ada ekstensi file yang wajar
+        #   - punya campuran huruf besar-kecil yang "acak" (ciri base64/token)
+        # Pakai path ASLI (case dipertahankan) karena base64 dikenali dari pola casing.
+        path_orig = urlparse(ep_orig).path if ep_orig.lower().startswith("http") else ep_orig
+        path_orig = path_orig.split("?")[0].strip("/")
+
+        if len(path_orig) > 50:
+            # Ada ekstensi file wajar di path? (endpoint asli biasanya punya)
+            has_valid_ext = bool(re.search(
+                r'\.(aspx?|php|jsp|html?|json|xml|do|action|cgi|py|rb|go|txt)($|/)',
+                path_orig, re.IGNORECASE
+            ))
+            # Konten tanpa separator
+            content = re.sub(r'[/_-]', '', path_orig)
+            if content and not has_valid_ext:
+                # Ciri base64/token: campuran case acak DAN transisi case sering
+                # (mis. 'wEPDwUKLTE' - huruf besar-kecil selang-seling tak beraturan).
+                # Endpoint asli seperti 'GetUserProfile' punya transisi case teratur
+                # (huruf besar hanya di awal kata).
+                case_transitions = len(re.findall(r'(?:[a-z][A-Z]|[A-Z]{2,}[a-z]|[0-9][A-Za-z]|[A-Za-z][0-9])', content))
+                transition_ratio = case_transitions / len(content)
+                # base64 ratio
+                b64_ratio = len(re.findall(r'[A-Za-z0-9+/=]', content)) / len(content)
+                # Junk: hampir semua base64 + banyak transisi case acak
+                if b64_ratio > 0.98 and transition_ratio > 0.15:
+                    return False
 
         return True
 
