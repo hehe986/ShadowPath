@@ -154,7 +154,8 @@ class WebCrawler:
                  timing_mode: str = "normal",
                  crawl_js: bool = True,
                  follow_subdomains: bool = False,
-                 timeout: int = 15):
+                 timeout: int = 15,
+                 known_scheme: str = ""):
         """
         Args:
             target_domain: domain target, misal 'example.com'
@@ -164,12 +165,15 @@ class WebCrawler:
             crawl_js: ikut download dan parse file JS external
             follow_subdomains: ikut crawl subdomain target
             timeout: HTTP timeout per request
+            known_scheme: scheme yang sudah diketahui (http/https) dari liveness
+                          check sebelumnya — kalau diisi, skip probe HTTPS/HTTP
         """
         self.target       = target_domain.lower().strip()
         self.max_pages    = max_pages
         self.max_depth    = max_depth
         self.crawl_js     = crawl_js
         self.timeout      = timeout
+        self._known_scheme = known_scheme  # dari LiveChecker, skip probe kalau ada
 
         self.session      = StealthSession(
             timing_mode=timing_mode,
@@ -209,10 +213,16 @@ class WebCrawler:
           urls, endpoints, forms, scripts, raw_pages, stats
         """
         if not seed_url:
-            # Auto-resolve scheme: test HTTPS dulu, fallback ke HTTP kalau gagal.
-            # Banyak target lama (termasuk test target) cuma serve di HTTP port 80,
-            # kalau langsung pakai HTTPS bakal timeout dan crawl 0 hasil.
-            self._scheme = self._resolve_scheme()
+            # Kalau scheme sudah diketahui dari liveness check sebelumnya, pakai itu
+            # langsung — hindari probe HTTPS/HTTP ulang (hemat 1 request + hindari
+            # "1 failed" palsu di stats saat target hanya serve HTTP).
+            if self._known_scheme:
+                self._scheme = self._known_scheme
+            else:
+                # Auto-resolve scheme: test HTTPS dulu, fallback ke HTTP kalau gagal.
+                # Banyak target lama (termasuk test target) cuma serve di HTTP port 80,
+                # kalau langsung pakai HTTPS bakal timeout dan crawl 0 hasil.
+                self._scheme = self._resolve_scheme()
             seed_url = f"{self._scheme}://{self.target}/"
         else:
             # Ambil scheme dari seed yang diberikan user
