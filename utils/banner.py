@@ -11,7 +11,7 @@ def show_banner():
     print(banner)
     print("  ShadowPath - Hidden Endpoint Discovery Engine")
     print("  Author  : H1lm1.exe")
-    print("  Version : 2.0.0")
+    print("  Version : 2.1.0")
     print("  Sources : GitHub · GitLab · Bitbucket")
     print("  " + "─" * 50)
     print()
