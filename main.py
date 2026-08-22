@@ -661,11 +661,18 @@ def main():
     if result and getattr(config, "GENERATE_HTML_REPORT", False) and not args.no_html:
         try:
             from utils.html_report import HTMLReport
-            import os
+            import os, re
             os.makedirs(config.RESULTS_DIR, exist_ok=True)
             report = HTMLReport()
+            # File utama (selalu report terbaru)
             report.generate(result, config.HTML_REPORT)
+            # File unik per target+waktu (biar ga ketimpa scan berikutnya)
+            safe_target = re.sub(r'[^a-zA-Z0-9._-]', '_', target)
+            stamp = time.strftime("%Y%m%d_%H%M%S")
+            unique_path = f"{config.RESULTS_DIR}/report_{safe_target}_{stamp}.html"
+            report.generate(result, unique_path)
             Logger.success(f"HTML report: {config.HTML_REPORT}")
+            Logger.success(f"HTML report (arsip): {unique_path}")
         except Exception as e:
             Logger.warn(f"HTML report error: {e}")
 
