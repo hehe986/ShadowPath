@@ -1,119 +1,256 @@
 import re
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs
 
 
-class EndpointExtractor:
+class EndpointFilter:
     def __init__(self):
-        self.patterns = [
-            # Path string biasa: "/api/v1/users"
-            r'["\'](/[a-zA-Z0-9_/\-\.]+)["\']',
-            # URL lengkap
-            r'["\']((https?://)[^"\'<>\s]{5,200})["\']',
-            # Route definition: @app.route("/path")
-            r'@\w+\.route\(["\']([^"\']+)["\']',
-            # Express/Node: app.get("/path", ...)
-            r'app\.\w+\(["\']([^"\']+)["\']',
-            # Axios/fetch/request call
-            r'(?:axios|fetch|request)\s*\.\s*\w+\s*\(["\']([^"\']+)["\']',
-            # url: "/path" dalam objek
-            r'(?:url|path|endpoint|route)\s*[:=]\s*["\']([^"\']+)["\']',
-            # href="/path"
-            r'href=["\']([^"\']+)["\']',
-            # action="/path"
-            r'action=["\']([^"\']+)["\']',
-        ]
-
-        # Extension yang tidak relevan untuk endpoint
-        self.excluded_extensions = {
-            ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico",
-            ".css", ".woff", ".woff2", ".ttf", ".eot", ".map",
-            ".pdf", ".zip", ".tar", ".gz", ".mp4", ".mp3"
+        # Ekstensi file statis yang tidak relevan
+        self.blacklist_ext = {
+            ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff",
+            ".css", ".scss", ".less",
+            ".svg", ".woff", ".woff2", ".ttf", ".eot", ".otf",
+            ".ico", ".cur",
+            ".mp4", ".mp3", ".avi", ".mov", ".webm", ".ogg", ".wav",
+            ".pdf", ".zip", ".tar", ".gz", ".rar", ".7z",
+            ".map",  # source map
         }
 
-    # =========================
-    # 🔹 EXTRACT DARI TEXT
-    # =========================
-    def extract_from_text(self, text: str) -> list:
-        endpoints = set()
-        for pattern in self.patterns:
-            try:
-                matches = re.findall(pattern, text)
-                for match in matches:
-                    # re.findall bisa return tuple jika ada group
-                    ep = match[0] if isinstance(match, tuple) else match
-                    ep = ep.strip()
-                    if self._is_valid_endpoint(ep):
-                        endpoints.add(ep)
-            except re.error:
-                continue
-        return list(endpoints)
+        # Path yang tidak relevan untuk pentesting
+        self.blacklist_paths = {
+            "/favicon.ico", "/robots.txt", "/sitemap.xml",
+            "/ads.txt", "/security.txt", "/.well-known",
+        }
+
+        # Keyword yang menandakan endpoint menarik dari sisi security
+        self.interesting_keywords = [
+            "api", "admin", "auth", "login", "logout", "register",
+            "token", "key", "secret", "password", "reset", "forgot",
+            "upload", "download", "file", "export", "import",
+            "user", "account", "profile", "setting", "config",
+            "debug", "test", "dev", "internal", "private", "hidden",
+            "dashboard", "panel", "manage", "console", "control",
+            "search", "query", "graphql", "grpc", "rpc", "soap",
+            "webhook", "callback", "redirect", "oauth", "sso",
+            "backup", "log", "report", "data", "database", "db",
+            "v1", "v2", "v3",  # API versioning
+        ]
+
+        self.min_length = 3
 
     # =========================
-    # 🔹 EXTRACT DARI BANYAK FILE (BUG FIX)
+    # ✅ VALIDASI DASAR
     # =========================
-    def extract_from_files(self, files_dict: dict) -> list:
-        """
-        files_dict: {url/path: content_string}
-        Bug fix: variabel 'endpoints' sebelumnya tidak didefinisikan.
-        """
-        results = []  # ✅ Fix: dulu pakai 'endpoints' yang tidak didefinisikan
-        for _, content in files_dict.items():
-            if content:
-                results.extend(self.extract_from_text(content))
+    def is_valid(self, endpoint: str) -> bool:
+        ep = endpoint.strip().lower()
+
+        if len(ep) < self.min_length:
+            return False
+
+        # Ekstensi statis
+        path = urlparse(ep).path if ep.startswith("http") else ep
+        path_no_query = path.split("?")[0]
+        for ext in self.blacklist_ext:
+            if path_no_query.endswith(ext):
+                return False
+
+        # Path blacklist
+        for bl in self.blacklist_paths:
+            if path_no_query == bl:
+                return False
+
+        # Abaikan template / placeholder
+        if re.search(r'\{\{|\$\{|<%=', ep):
+            return False
+
+        # Harus ada karakter alfanumerik
+        if not re.search(r'[a-zA-Z0-9]', ep):
+            return False
+
+        # Filter ViewState / base64 junk:
+        # segment path yang sangat panjang (>60 char) tanpa titik/slash internal
+        # dan campuran acak huruf besar-kecil+angka = kemungkinan besar token,
+        # bukan endpoint asli (misal __VIEWSTATE ASP.NET yang ke-parse jadi URL).
+        last_segment = path_no_query.rstrip("/").split("/")[-1]
+        if len(last_segment) > 60:
+            # Hitung rasio karakter "acak" (base64-like tanpa ekstensi file)
+            has_ext = "." in last_segment[-6:]  # ada ekstensi di ujung?
+            if not has_ext and re.match(r'^[a-zA-Z0-9+/=_-]+$', last_segment):
+                return False
+
+        return True
+
+    # =========================
+    # 🔍 FILTER LIST
+    # =========================
+    def filter(self, endpoints: list) -> list:
+        results = []
+        for ep in endpoints:
+            if self.is_valid(ep):
+                results.append(ep)
         return list(set(results))
 
     # =========================
-    # 🔹 EXTRACT + PASANGKAN KE DOMAIN TARGET
+    # 🎯 FILTER + SCORING (PRIORITAS)
     # =========================
-    def extract_and_build(self, files_dict: dict, base_domain: str) -> list:
+    def filter_and_score(self, endpoints: list) -> list:
         """
-        Ekstrak endpoint lalu gabungkan dengan domain target.
-        Hanya return path relative (bukan URL eksternal lain).
+        Filter endpoint dan beri skor berdasarkan potensi security interest.
+        Return list diurutkan dari skor tertinggi.
 
-        Returns: list of full URL untuk target domain
+        Score per item:
+          +2 per interesting keyword
+          +1 jika ada query parameter
+          +1 jika path lebih dari 2 segment
+          -1 jika path terlalu generik (/, /index, /home)
         """
-        raw = self.extract_from_files(files_dict)
-        built = []
+        scored = []
+        generic_paths = {"/", "/index", "/home", "/index.html", "/index.php"}
 
-        base = base_domain.rstrip("/")
-        if not base.startswith("http"):
-            base = "https://" + base
+        for ep in endpoints:
+            if not self.is_valid(ep):
+                continue
 
-        for ep in raw:
-            if ep.startswith("/"):
-                built.append(base + ep)
-            elif ep.startswith("http"):
-                # Hanya ambil jika domain sama
+            score = 0
+            ep_lower = ep.lower()
+
+            # Keyword menarik
+            for kw in self.interesting_keywords:
+                if kw in ep_lower:
+                    score += 2
+
+            # Ada query parameter
+            try:
                 parsed = urlparse(ep)
-                target_parsed = urlparse(base)
-                if parsed.netloc == target_parsed.netloc:
-                    built.append(ep)
+                if parsed.query:
+                    params = parse_qs(parsed.query)
+                    score += len(params)  # +1 per parameter
 
-        return list(set(built))
+                # Path depth
+                path_parts = [p for p in parsed.path.split("/") if p]
+                if len(path_parts) > 2:
+                    score += 1
+
+                # Generik
+                if parsed.path in generic_paths:
+                    score -= 1
+
+            except Exception:
+                pass
+
+            scored.append({"endpoint": ep, "score": score})
+
+        # Sort by score descending
+        scored.sort(key=lambda x: x["score"], reverse=True)
+        return scored
 
     # =========================
-    # 🔹 VALIDASI ENDPOINT
+    # 🔴 FILTER HANYA YANG MENARIK
     # =========================
-    def _is_valid_endpoint(self, ep: str) -> bool:
-        if not ep or len(ep) < 2 or len(ep) > 200:
-            return False
+    def filter_interesting(self, endpoints: list, min_score: int = 2) -> list:
+        """Return hanya endpoint dengan score >= min_score."""
+        scored = self.filter_and_score(endpoints)
+        return [item["endpoint"] for item in scored if item["score"] >= min_score]
 
-        # Abaikan fragment
-        if ep.startswith("#"):
-            return False
+    # =========================
+    # 🧹 NORMALISASI & DEDUP
+    # =========================
+    def normalize(self, endpoint: str) -> str:
+        """Normalisasi endpoint: lowercase path, buang trailing slash."""
+        ep = endpoint.strip()
+        if ep.startswith("http"):
+            try:
+                parsed = urlparse(ep)
+                path = parsed.path.rstrip("/") or "/"
+                normalized = f"{parsed.scheme}://{parsed.netloc}{path}"
+                if parsed.query:
+                    normalized += f"?{parsed.query}"
+                return normalized
+            except Exception:
+                return ep
+        return ep.rstrip("/") or "/"
 
-        # Abaikan template variable murni
-        if ep.startswith("{{") or ep.startswith("${"):
-            return False
+    def deduplicate(self, endpoints: list) -> list:
+        """
+        Deduplikasi dengan normalisasi — /api/v1/ dan /api/v1 dianggap sama.
+        """
+        seen = set()
+        unique = []
+        for ep in endpoints:
+            norm = self.normalize(ep)
+            if norm not in seen:
+                seen.add(norm)
+                unique.append(ep)
+        return unique
 
-        # Cek ekstensi file yang tidak relevan
-        lower = ep.lower().split("?")[0]
-        for ext in self.excluded_extensions:
-            if lower.endswith(ext):
-                return False
+    # =========================
+    # 🔗 SEPARATE BY TYPE
+    # =========================
+    def separate_by_type(self, endpoints: list) -> dict:
+        """
+        Pisahkan endpoint berdasarkan tipe:
+          - api: mengandung /api/, /v1/, /v2/, graphql, dll
+          - auth: login, logout, register, oauth, dll
+          - file: upload, download, export, dll
+          - admin: admin, panel, dashboard, dll
+          - other: sisanya
+        """
+        categories = {
+            "api": [],
+            "auth": [],
+            "file": [],
+            "admin": [],
+            "other": [],
+        }
 
-        # Harus dimulai dengan / atau http
-        if not (ep.startswith("/") or ep.startswith("http")):
-            return False
+        api_kw = {"api", "v1", "v2", "v3", "graphql", "grpc", "rpc", "rest", "soap", "webhook"}
+        auth_kw = {"login", "logout", "register", "auth", "oauth", "sso", "token", "session", "2fa", "mfa", "forgot", "reset", "verify"}
+        file_kw = {"upload", "download", "export", "import", "file", "attachment", "media", "storage", "backup"}
+        admin_kw = {"admin", "panel", "dashboard", "console", "manage", "management", "control", "staff", "superuser", "backoffice"}
 
-        return True
+        for ep in endpoints:
+            if not self.is_valid(ep):
+                continue
+            ep_lower = ep.lower()
+
+            if any(k in ep_lower for k in admin_kw):
+                categories["admin"].append(ep)
+            elif any(k in ep_lower for k in auth_kw):
+                categories["auth"].append(ep)
+            elif any(k in ep_lower for k in file_kw):
+                categories["file"].append(ep)
+            elif any(k in ep_lower for k in api_kw):
+                categories["api"].append(ep)
+            else:
+                categories["other"].append(ep)
+
+        # Deduplikasi per kategori
+        for k in categories:
+            categories[k] = self.deduplicate(categories[k])
+
+        return categories
+
+    # =========================
+    # 📊 FILTER WITH STATS
+    # =========================
+    def filter_with_stats(self, endpoints: list) -> dict:
+        """Filter dan kembalikan statistik lengkap."""
+        valid = self.filter(endpoints)
+        deduped = self.deduplicate(valid)
+        by_type = self.separate_by_type(deduped)
+        scored = self.filter_and_score(deduped)
+
+        return {
+            "endpoints": deduped,
+            "by_type": by_type,
+            "scored": scored[:20],  # top 20
+            "summary": {
+                "total_input": len(endpoints),
+                "after_filter": len(valid),
+                "after_dedup": len(deduped),
+                "api": len(by_type["api"]),
+                "auth": len(by_type["auth"]),
+                "file": len(by_type["file"]),
+                "admin": len(by_type["admin"]),
+                "other": len(by_type["other"]),
+            }
+        }
