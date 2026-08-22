@@ -44,6 +44,45 @@ class EndpointClassifier:
     # =========================
     # 🔥 STATUS CODE CLASSIFICATION (ACTIVE SCAN)
     # =========================
+    def _is_error_page(self, body: str) -> bool:
+        """
+        Deteksi soft-error: body yang isinya halaman error server walau status 200.
+        Return True kalau body kelihatan seperti error/maintenance page.
+
+        Cek hanya pada body pendek (halaman error biasanya ringkas). Halaman
+        asli yang panjang jarang cocok karena pola dicek di awal konten.
+        """
+        if not body:
+            return False
+
+        # Ambil potongan awal (halaman error biasanya menaruh pesan di awal)
+        head = body[:2000]
+
+        error_signatures = [
+            "service unavailable",
+            "503 service",
+            "temporarily unable to service",
+            "maintenance downtime",
+            "under maintenance",
+            "site is temporarily unavailable",
+            "500 internal server error",
+            "502 bad gateway",
+            "504 gateway timeout",
+            "database connection error",
+            "error establishing a database connection",
+            "account suspended",
+            "this site can't be reached",
+            "application error",
+        ]
+        # Minimal 1 signature match DAN body relatif pendek (ciri error page)
+        matched = any(sig in head for sig in error_signatures)
+        if matched and len(body) < 3000:
+            return True
+        # Signature kuat (eksplisit maintenance) → error walau body agak panjang
+        strong = ("temporarily unable to service" in head or
+                  "error establishing a database connection" in head)
+        return strong
+
     def classify_status(self, results):
         """
         Klasifikasi 4-way berdasar kombinasi:
@@ -76,6 +115,22 @@ class EndpointClassifier:
                 continue
 
             url_lower = url.lower()
+            body = (item.get("content") or item.get("body") or "").lower()
+
+            # ── STEP 0: Deteksi soft-error ──
+            # Sebagian server balikin status 200 tapi body-nya halaman error
+            # (503 maintenance, "service unavailable", dll). Ini bukan endpoint
+            # yang beneran terbuka — perlakukan sebagai closed/skip supaya tidak
+            # jadi false positive di private_open.
+            if body and self._is_error_page(body):
+                # endpoint ada tapi lagi error → closed (bukan open)
+                is_sensitive = any(k in url_lower for k in self.sensitive_keywords)
+                is_hidden    = any(k in url_lower for k in self.hidden_keywords)
+                if is_sensitive or is_hidden:
+                    private_closed.append(url)
+                else:
+                    public_closed.append(url)
+                continue
 
             # ── STEP 1: Tentukan sifat endpoint (public vs private) ──
             is_sensitive = any(k in url_lower for k in self.sensitive_keywords)
