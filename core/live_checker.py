@@ -152,6 +152,7 @@ class LiveChecker:
             "final_url":      "",
             "headers":        {},
             "content":        "",
+            "scheme":         "",
         }
 
         # ── STEP 1: DNS ──
@@ -189,6 +190,7 @@ class LiveChecker:
             result["final_url"]      = final_url
             result["headers"]        = probe.get("headers", {})
             result["content"]        = content
+            result["scheme"]         = scheme
 
             # Extract title
             title_match = re.search(r'<title[^>]*>(.*?)</title>',
