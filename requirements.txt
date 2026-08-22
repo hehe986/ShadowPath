@@ -1,4 +1,4 @@
-# ShadowPath v2.0.0 - Requirements
+# ShadowPath v2.1.0 - Requirements
 # Install: pip install -r requirements.txt
 
 requests>=2.31.0
