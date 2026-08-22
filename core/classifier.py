@@ -5,27 +5,59 @@ from difflib import SequenceMatcher
 class EndpointClassifier:
     def __init__(self, hidden_keywords=None, sensitive_keywords=None):
         self.hidden_keywords = hidden_keywords or [
-            "admin", "internal", "private", "dashboard", "panel",
-            "manage", "management", "control", "console", "portal",
-            "backend", "backoffice", "staff", "superuser", "root"
+            "admin", "internal", "dashboard", "panel",
+            "manage", "management", "console",
+            "backend", "backoffice", "superuser",
+            "phpmyadmin", "wp-admin", "administrator",
         ]
         self.sensitive_keywords = sensitive_keywords or [
-            "login", "auth", "token", "apikey", "password", "secret",
-            "credential", "oauth", "jwt", "session", "key", "reset",
-            "forgot", "register", "signup", "2fa", "mfa", "verify"
+            "login", "auth", "token", "apikey", "api-key", "password",
+            "passwd", "secret", "credential", "oauth", "jwt",
+            "reset-password", "forgot-password", "signin", "signup",
+            "2fa", "mfa",
         ]
+        # Path/segmen yang mengandung keyword tapi sebenarnya PUBLIK.
+        # Kalau URL cocok salah satu ini, jangan di-tag private walau ada keyword.
+        self.public_whitelist = [
+            "portal-belajar", "portal-siswa", "portal-informasi",
+            "portal-publik", "portal-berita", "e-learning", "elearning",
+            "register-online", "registrasi-online", "pendaftaran",
+            "informasi", "berita", "pengumuman", "artikel", "galeri",
+        ]
+
+    def _has_keyword(self, url_lower: str, keywords: list) -> bool:
+        """
+        Cek keyword sebagai KATA UTUH (word-boundary), bukan substring.
+        Ini menghindari false positive seperti:
+          - "key" cocok dengan "monkey", "keyboard"
+          - "root" cocok dengan "roots", "chroot"
+          - "auth" cocok dengan "author", "authentic" (artikel)
+        Separator URL (/, -, _, ., ?, =, &) dianggap batas kata.
+        """
+        import re
+        for k in keywords:
+            # \b tidak menganggap '-' sebagai batas, jadi pakai pola manual:
+            # keyword harus diapit oleh awal/akhir string atau separator URL.
+            pattern = r'(^|[/\-_.?=&])' + re.escape(k) + r'($|[/\-_.?=&s])'
+            if re.search(pattern, url_lower):
+                return True
+        return False
+
+    def _is_whitelisted(self, url_lower: str) -> bool:
+        """Cek apakah URL cocok whitelist publik (walau ada keyword sensitif)."""
+        return any(w in url_lower for w in self.public_whitelist)
 
     # =========================
     # 🔹 KEYWORD CLASSIFICATION (OSINT)
     # =========================
     def classify(self, endpoint):
         ep = endpoint.lower()
-        for k in self.sensitive_keywords:
-            if k in ep:
-                return "sensitive"
-        for k in self.hidden_keywords:
-            if k in ep:
-                return "hidden"
+        if self._is_whitelisted(ep):
+            return "public"
+        if self._has_keyword(ep, self.sensitive_keywords):
+            return "sensitive"
+        if self._has_keyword(ep, self.hidden_keywords):
+            return "hidden"
         return "public"
 
     def classify_list(self, endpoints):
@@ -124,8 +156,8 @@ class EndpointClassifier:
             # jadi false positive di private_open.
             if body and self._is_error_page(body):
                 # endpoint ada tapi lagi error → closed (bukan open)
-                is_sensitive = any(k in url_lower for k in self.sensitive_keywords)
-                is_hidden    = any(k in url_lower for k in self.hidden_keywords)
+                is_sensitive = (not self._is_whitelisted(url_lower)) and self._has_keyword(url_lower, self.sensitive_keywords)
+                is_hidden    = (not self._is_whitelisted(url_lower)) and self._has_keyword(url_lower, self.hidden_keywords)
                 if is_sensitive or is_hidden:
                     private_closed.append(url)
                 else:
@@ -133,8 +165,8 @@ class EndpointClassifier:
                 continue
 
             # ── STEP 1: Tentukan sifat endpoint (public vs private) ──
-            is_sensitive = any(k in url_lower for k in self.sensitive_keywords)
-            is_hidden    = any(k in url_lower for k in self.hidden_keywords)
+            is_sensitive = (not self._is_whitelisted(url_lower)) and self._has_keyword(url_lower, self.sensitive_keywords)
+            is_hidden    = (not self._is_whitelisted(url_lower)) and self._has_keyword(url_lower, self.hidden_keywords)
             is_private   = is_sensitive or is_hidden
 
             # ── STEP 2: Tentukan aksesibilitas (open vs closed) ──
