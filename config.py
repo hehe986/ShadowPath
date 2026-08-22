@@ -1,5 +1,5 @@
 # =========================================================
-#          ShadowPath Configuration v2.0.0
+#          ShadowPath Configuration v2.1.0
 # =========================================================
 
 # =========================
@@ -25,6 +25,9 @@ CRAWL_MAX_PAGES       = 100
 CRAWL_MAX_DEPTH       = 4
 CRAWL_JS              = True
 CRAWL_FOLLOW_SUBS     = False
+
+# SPA rendering: "off" | "auto" | "on"
+SPA_MODE              = "auto"
 
 # =========================
 # RECON MODE (Subdomain + Crawl)
