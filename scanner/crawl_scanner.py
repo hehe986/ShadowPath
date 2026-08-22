@@ -419,6 +419,7 @@ class CrawlScanner:
     def _empty_result(self) -> dict:
         return {
             "mode": "crawl",
+            "target": self.target,
             "target_check": None,
             "live_hosts": {},
             "classified": {
