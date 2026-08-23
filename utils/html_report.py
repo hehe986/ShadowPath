@@ -38,11 +38,13 @@ class HTMLReport:
         parameters = self._extract_parameters(data)
         tech       = data.get("tech", {})
         stats      = self._extract_stats(data)
+        status_map = self._extract_status_map(data)
 
         html_content = self._build_html(
             target=target, mode=mode, timestamp=timestamp,
             classified=classified, subdomains=subdomains,
             parameters=parameters, tech=tech, stats=stats,
+            status_map=status_map,
         )
 
         with open(output_path, "w", encoding="utf-8") as f:
@@ -87,6 +89,27 @@ class HTMLReport:
             "private_closed": c.get("private_closed", []),
             "public_closed":  c.get("public_closed", []),
         }
+
+    def _extract_status_map(self, data: dict) -> dict:
+        """
+        Bikin map url -> status_code dari berbagai sumber data.
+        Dipakai buat nampilin badge [200]/[404]/dll di report.
+        """
+        smap = {}
+        for key in ("validated", "raw_results", "results", "raw"):
+            for item in (data.get(key) or []):
+                if isinstance(item, dict) and item.get("url"):
+                    sc = item.get("status_code")
+                    if sc is not None:
+                        smap[item["url"]] = sc
+        if data.get("mode") == "recon":
+            agg = data.get("aggregated", {})
+            for item in (agg.get("details") or []):
+                if isinstance(item, dict) and item.get("url"):
+                    sc = item.get("status_code")
+                    if sc is not None:
+                        smap[item["url"]] = sc
+        return smap
 
     def _extract_subdomains(self, data: dict) -> list:
         if data.get("mode") == "recon":
@@ -133,6 +156,7 @@ class HTMLReport:
         parameters = kw["parameters"]
         tech       = kw["tech"]
         stats      = kw["stats"]
+        status_map = kw.get("status_map", {})
 
         # Build endpoint rows (untuk JS data)
         endpoint_data = []
@@ -144,7 +168,11 @@ class HTMLReport:
         }
         for cat_key, (label, cls) in cat_meta.items():
             for url in classified.get(cat_key, []):
-                endpoint_data.append({"url": url, "category": label, "class": cls})
+                sc = status_map.get(url, "")
+                endpoint_data.append({
+                    "url": url, "category": label, "class": cls,
+                    "status": sc if sc != "" else "-",
+                })
 
         endpoints_json = json.dumps(endpoint_data)
 
@@ -225,6 +253,13 @@ a:hover {{ text-decoration:underline; }}
 .sub-table td.status-empty {{ color:#8b949e; }}
 .sub-table td.status-dns {{ color:#d29922; }}
 .sub-table td.status-dead {{ color:#f85149; }}
+.stcode {{ display:inline-block; min-width:38px; text-align:center; padding:2px 8px; border-radius:5px; font-size:12px; font-weight:600; font-family:monospace; }}
+.st-2xx {{ background:#132e1c; color:#3fb950; border:1px solid #238636; }}
+.st-3xx {{ background:#0d2436; color:#58a6ff; border:1px solid #1f6feb; }}
+.st-auth {{ background:#2d2a10; color:#d29922; border:1px solid #9e6a03; }}
+.st-4xx {{ background:#2d1518; color:#f85149; border:1px solid #b62324; }}
+.st-5xx {{ background:#31161a; color:#ff7b72; border:1px solid #da3633; }}
+.st-unknown {{ background:#161b22; color:#8b949e; border:1px solid #30363d; }}
 footer {{ text-align:center; color:#8b949e; font-size:12px; margin-top:40px; padding-top:20px; border-top:1px solid #30363d; }}
 .empty {{ color:#8b949e; font-style:italic; padding:20px; text-align:center; }}
 </style>
@@ -259,7 +294,7 @@ footer {{ text-align:center; color:#8b949e; font-size:12px; margin-top:40px; pad
       </select>
     </div>
     <table id="endpoints">
-      <thead><tr><th data-sort="url">URL</th><th data-sort="category">Category</th></tr></thead>
+      <thead><tr><th data-sort="url">URL</th><th data-sort="status">Status</th><th data-sort="category">Category</th></tr></thead>
       <tbody id="ep-body"></tbody>
     </table>
     <div id="ep-empty" class="empty" style="display:none;">No endpoints match your filter</div>
@@ -297,7 +332,17 @@ function render() {{
     const cls = e.category.toLowerCase().replace('-','').includes('privateopen') ? 'critical'
               : e.category === 'PUBLIC-OPEN' ? 'ok'
               : e.category === 'PRIVATE-CLOSED' ? 'warn' : 'muted';
+    // Badge status HTTP berwarna
+    const sc = e.status;
+    let scls = 'st-unknown';
+    if (sc >= 200 && sc < 300) scls = 'st-2xx';
+    else if (sc >= 300 && sc < 400) scls = 'st-3xx';
+    else if (sc === 401 || sc === 403) scls = 'st-auth';
+    else if (sc >= 400 && sc < 500) scls = 'st-4xx';
+    else if (sc >= 500) scls = 'st-5xx';
+    const scBadge = `<span class="stcode ${{scls}}">${{sc}}</span>`;
     return `<tr><td><a href="${{e.url}}" target="_blank" rel="noopener">${{e.url}}</a></td>`
+         + `<td>${{scBadge}}</td>`
          + `<td><span class="tag ${{cls}}">${{e.category}}</span></td></tr>`;
   }}).join('');
 }}
