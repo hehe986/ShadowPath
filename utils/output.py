@@ -215,8 +215,9 @@ class OutputFormatter:
     # =========================
     @staticmethod
     def save_txt(path: str, classified_data: dict, param_data: dict = None,
-                 dup_analysis: dict = None, target: str = ""):
+                 dup_analysis: dict = None, target: str = "", status_map: dict = None):
         """Simpan hasil ke .txt dengan format yang rapi."""
+        status_map = status_map or {}
         try:
             os.makedirs(os.path.dirname(path), exist_ok=True) if os.path.dirname(path) else None
             with open(path, "w", encoding="utf-8") as f:
@@ -253,7 +254,11 @@ class OutputFormatter:
                     f.write(f"# {title} ({len(items)})\n")
                     f.write(f"# {'═' * 44}\n")
                     for ep in sorted(items):
-                        f.write(ep + "\n")
+                        sc = status_map.get(ep, "")
+                        if sc != "":
+                            f.write(f"[{sc}] {ep}\n")
+                        else:
+                            f.write(ep + "\n")
                     f.write("\n")
 
                 # Duplicate warnings
