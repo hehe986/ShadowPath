@@ -78,24 +78,34 @@ class URLHarvester:
     # SUMBER
     # =============================================================
     def _harvest_wayback(self):
-        """Wayback Machine CDX API."""
+        """Wayback Machine CDX API. Retry beberapa kali karena server sering lambat."""
         host = f"*.{self.target}/*" if self.include_subs else f"{self.target}/*"
-        url = (f"http://web.archive.org/cdx/search/cdx"
+        url = (f"https://web.archive.org/cdx/search/cdx"
                f"?url={host}&output=json&fl=original&collapse=urlkey"
                f"&limit={self.max_urls}")
-        try:
-            r = requests.get(url, timeout=self.timeout)
-            if r.status_code != 200:
-                Logger.warn(f"Wayback returned {r.status_code}")
+        # Wayback sering lambat → timeout lebih panjang + retry
+        wb_timeout = max(self.timeout, 60)
+        max_retry = 3
+        for attempt in range(1, max_retry + 1):
+            try:
+                r = requests.get(url, timeout=wb_timeout)
+                if r.status_code != 200:
+                    Logger.warn(f"Wayback returned {r.status_code}")
+                    return
+                data = r.json()
+                for row in data[1:]:  # baris pertama header
+                    if row and self._is_valid(row[0]):
+                        self.found.add(row[0])
+                        self.by_source["wayback"] += 1
+                return  # sukses, keluar
+            except requests.Timeout:
+                if attempt < max_retry:
+                    Logger.warn(f"Wayback timeout, retry {attempt}/{max_retry-1}...")
+                    continue
+                Logger.warn("Wayback timeout — dilewati (sumber lain tetap jalan)")
+            except (requests.RequestException, json.JSONDecodeError, ValueError) as e:
+                Logger.warn(f"Wayback error: {e}")
                 return
-            data = r.json()
-            # baris pertama header
-            for row in data[1:]:
-                if row and self._is_valid(row[0]):
-                    self.found.add(row[0])
-                    self.by_source["wayback"] += 1
-        except (requests.RequestException, json.JSONDecodeError, ValueError) as e:
-            Logger.warn(f"Wayback error: {e}")
 
     def _harvest_commoncrawl(self):
         """Common Crawl index (ambil index terbaru)."""
