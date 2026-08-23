@@ -498,10 +498,25 @@ def run_harvest(target: str, args) -> dict:
     harvest_result = harvester.harvest()
     urls = harvest_result["urls"]
 
+    # ── Klasifikasi SEMUA url (dipakai baik raw maupun classified) ──
+    from core.classifier import EndpointClassifier
+    clf = EndpointClassifier()
+    buckets = {"private_open": [], "public_open": []}
+    for u in urls:
+        kind = clf.classify(u)
+        if kind in ("sensitive", "hidden"):
+            buckets["private_open"].append(u)
+        else:
+            buckets["public_open"].append(u)
+
     # ── OUTPUT: raw atau classified ──
     if args.raw:
-        # Mode RAW: tampilkan semua URL apa adanya (kayak gau)
+        # Mode RAW: tampilkan SEMUA URL (kayak gau), tapi tetap ada klasifikasi
+        # + badge di report. Tidak ada URL yang dibuang.
         Logger.section(f"RAW OUTPUT ({len(urls)} URL)")
+        print(f"  ⚠️  Private/Sensitif : {len(buckets['private_open'])}")
+        print(f"  ✅ Public          : {len(buckets['public_open'])}")
+        print()
         for u in urls:
             print(u)
         result = {
@@ -509,22 +524,12 @@ def run_harvest(target: str, args) -> dict:
             "target": target,
             "raw": True,
             "urls": urls,
+            "classified": buckets,   # tetap sertakan biar report punya badge
             "total": len(urls),
             "by_source": harvest_result["by_source"],
         }
     else:
-        # Mode CLASSIFIED: kelompokkan pakai classifier 4-way
-        from core.classifier import EndpointClassifier
-        clf = EndpointClassifier()
-        buckets = {"private_open": [], "public_open": []}
-        # Harvest = URL dari arsip, statusnya unknown → klasifikasi by keyword saja
-        for u in urls:
-            kind = clf.classify(u)
-            if kind in ("sensitive", "hidden"):
-                buckets["private_open"].append(u)
-            else:
-                buckets["public_open"].append(u)
-
+        # Mode CLASSIFIED: fokus tampilkan pengelompokan
         Logger.section("CLASSIFIED OUTPUT")
         print(f"  Total URL       : {len(urls)}")
         print(f"  ⚠️  Private/Sensitif : {len(buckets['private_open'])}")
