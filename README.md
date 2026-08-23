@@ -12,7 +12,7 @@
 
 **Hidden Endpoint Discovery Engine**
 
-*Reconnaissance untuk pentest & bug bounty — subdomain enumeration, endpoint discovery, passive URL harvesting, dan SPA-aware crawling dengan stealth layer.*
+*Reconnaissance for pentest & bug bounty — subdomain enumeration, endpoint discovery, passive URL harvesting, and SPA-aware crawling with a stealth layer.*
 
 ![Python](https://img.shields.io/badge/python-3.10+-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
@@ -23,10 +23,10 @@
 
 ---
 
-## Daftar Isi
+## Table of Contents
 
 - [Overview](#overview)
-- [Kenapa ShadowPath?](#kenapa-shadowpath)
+- [Why ShadowPath?](#why-shadowpath)
 - [Key Features](#key-features)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
@@ -42,41 +42,41 @@
 
 ## Overview
 
-ShadowPath menggabungkan beberapa teknik reconnaissance dalam satu tool dengan output terstruktur dan stealth layer built-in. Lima mode operasi mencakup kebutuhan dari passive intelligence gathering sampai active reconnaissance ber-render JavaScript.
+ShadowPath combines several reconnaissance techniques in a single tool with structured output and a built-in stealth layer. Five operating modes cover everything from passive intelligence gathering to active, JavaScript-rendered reconnaissance.
 
-| Mode | Sumber | Impact |
+| Mode | Source | Impact |
 |------|--------|--------|
-| **OSINT** | GitHub · GitLab · Bitbucket source code | Zero traffic ke target |
-| **Harvest** | Wayback · Common Crawl · OTX · URLScan | Zero traffic (arsip pasif) |
-| **Crawl** | Real-time web spider (HTML + JS + SPA) | Minimal — mirip browser |
-| **Active** | Wordlist brute force | Medium — request berbasis dictionary |
-| **Recon** | Subdomain enum + crawl per subdomain | Tinggi — ribuan request lintas subdomain |
+| **OSINT** | GitHub · GitLab · Bitbucket source code | Zero traffic to target |
+| **Harvest** | Wayback · Common Crawl · OTX · URLScan | Zero traffic (passive archives) |
+| **Crawl** | Real-time web spider (HTML + JS + SPA) | Minimal — browser-like |
+| **Active** | Wordlist brute force | Medium — dictionary-based requests |
+| **Recon** | Subdomain enum + crawl per subdomain | High — thousands of requests across subdomains |
 
 ---
 
-## Kenapa ShadowPath?
+## Why ShadowPath?
 
-Kebanyakan tool discovery hanya memuntahkan daftar URL mentah — kamu dapat ribuan baris tanpa tahu mana yang penting. ShadowPath berbeda pada tiga hal:
+Most discovery tools just dump a raw list of URLs — you get thousands of lines with no idea which ones matter. ShadowPath differs in three ways:
 
-- **Hasil terklasifikasi, bukan daftar mentah.** Setiap endpoint dikelompokkan berdasarkan sifat (sensitif/umum) dan aksesibilitas (terbuka/terkunci), jadi kamu langsung tahu mana yang layak diperiksa duluan.
-- **Multi-sumber dalam satu tool.** Passive archive, live crawl, subdomain enum, dan source-code intelligence — tidak perlu merangkai lima tool berbeda secara manual.
-- **Context-aware.** Tidak asal menandai `login` sebagai sensitif; path publik seperti `portal-belajar` atau login siswa dikenali sebagai umum, mengurangi false positive.
+- **Classified results, not a raw dump.** Every endpoint is grouped by nature (sensitive/public) and accessibility (open/closed), so you immediately know what to check first.
+- **Multi-source in one tool.** Passive archives, live crawl, subdomain enum, and source-code intelligence — no need to chain five separate tools by hand.
+- **Context-aware.** It doesn't blindly flag `login` as sensitive; public paths like `portal-belajar` or student logins are recognized as public, reducing false positives.
 
 ---
 
 ## Key Features
 
-- **Passive URL harvesting** — kumpulkan ribuan URL historis dari Wayback Machine, Common Crawl, AlienVault OTX, dan URLScan tanpa menyentuh target
+- **Passive URL harvesting** — collect thousands of historical URLs from the Wayback Machine, Common Crawl, AlienVault OTX, and URLScan without touching the target
 - **Multi-source subdomain enumeration** — crt.sh, OTX, HackerTarget, Wayback, DNS bruteforce, permutation
-- **SPA-aware crawler** — auto-render halaman JavaScript (React/Vue/Angular) via headless Chromium; extract link + API endpoint (XHR/fetch)
-- **Liveness verification** — DNS + HTTP probe, deteksi parking page & soft-error (503 di balik status 200)
+- **SPA-aware crawler** — auto-render JavaScript pages (React/Vue/Angular) via headless Chromium; extract links + API endpoints (XHR/fetch)
+- **Liveness verification** — DNS + HTTP probe, parking page & soft-error detection (503 behind a 200 status)
 - **Stealth layer** — UA rotation, Gaussian timing jitter, header mimicry, noise interleaving
-- **4-way endpoint classification** — memisahkan sifat (public/private) × aksesibilitas (open/closed), dengan context-aware keyword matching
-- **HTTP status code** — kode status (200/403/404/…) ditampilkan di endpoints.txt dan report HTML, dengan badge berwarna
-- **Tech fingerprint** — deteksi server, framework, CMS, JS library, CDN, WAF, analytics
+- **4-way endpoint classification** — separates nature (public/private) × accessibility (open/closed), with context-aware keyword matching
+- **HTTP status codes** — status codes (200/403/404/…) shown in endpoints.txt and the HTML report, with colored badges
+- **Tech fingerprint** — detects server, framework, CMS, JS library, CDN, WAF, analytics
 - **Parameter extraction** — query, form, JSON keys, sensitive param detection
-- **Interactive HTML report** — searchable, filterable, dark theme, arsip per-scan (tidak saling menimpa)
-- **Notifikasi** — Discord & Telegram webhook
+- **Interactive HTML report** — searchable, filterable, dark theme, per-scan archive (no overwrites)
+- **Notifications** — Discord & Telegram webhooks
 
 ---
 
@@ -90,18 +90,18 @@ cd ShadowPath
 pip install -r requirements.txt
 ```
 
-Requires **Python 3.10+** dan **git**.
+Requires **Python 3.10+** and **git**.
 
-### SPA Rendering (opsional)
+### SPA Rendering (optional)
 
-Untuk scan website SPA (React/Vue/Angular), install headless browser:
+To scan SPA websites (React/Vue/Angular), install a headless browser:
 
 ```bash
 pip install playwright
 playwright install chromium
 ```
 
-Tanpa ini, scanner tetap jalan normal (HTTP mode) — hanya tidak bisa render SPA.
+Without this, the scanner still runs normally (HTTP mode) — it just can't render SPAs.
 
 ### Per Platform
 
@@ -145,7 +145,7 @@ pip install -r requirements.txt --break-system-packages
 <details>
 <summary><b>Windows</b></summary>
 
-Install [Python 3.10+](https://python.org/downloads) (centang **Add Python to PATH**) dan [Git](https://git-scm.com/download/win).
+Install [Python 3.10+](https://python.org/downloads) (check **Add Python to PATH**) and [Git](https://git-scm.com/download/win).
 
 ```powershell
 git clone https://github.com/hehe986/ShadowPath
@@ -169,7 +169,7 @@ pip3 install -r requirements.txt
 
 ### Troubleshooting
 
-Jika muncul error `externally-managed-environment` (Ubuntu 23.04+, Arch, Alpine):
+If you hit an `externally-managed-environment` error (Ubuntu 23.04+, Arch, Alpine):
 
 ```bash
 pip install -r requirements.txt --break-system-packages
@@ -179,16 +179,16 @@ pip install -r requirements.txt --break-system-packages
 
 ## Quick Start
 
-Baru pertama kali? Coba tiga langkah ini di target latihan legal (`testphp.vulnweb.com` milik Acunetix):
+First time? Try these three steps against a legal practice target (`testphp.vulnweb.com` by Acunetix):
 
 ```bash
-# 1. Crawl cepat — lihat endpoint yang ter-link
+# 1. Quick crawl — see linked endpoints
 python3 main.py -d testphp.vulnweb.com --crawl --max-pages 5 --timing fast
 
-# 2. Harvest — kumpulkan URL historis dari arsip publik
+# 2. Harvest — collect historical URLs from public archives
 python3 main.py -d testphp.vulnweb.com --harvest --raw
 
-# 3. Buka laporan interaktif
+# 3. Open the interactive report
 #   Linux/macOS: xdg-open results/report.html
 #   Windows    : start results\report.html
 ```
@@ -199,45 +199,45 @@ python3 main.py -d testphp.vulnweb.com --harvest --raw
 
 ### Harvest Mode — Passive URL Discovery
 
-Kumpulkan URL historis dari arsip publik tanpa menyentuh target. Bisa menghasilkan ribuan URL termasuk endpoint lama yang sudah tidak ter-link.
+Collect historical URLs from public archives without touching the target. Can yield thousands of URLs, including old endpoints no longer linked.
 
 ```bash
-python3 main.py -d target.com --harvest              # classified (dikelompokkan)
-python3 main.py -d target.com --harvest --raw        # semua URL tanpa filter
-python3 main.py -d target.com --harvest --no-subs    # domain utama saja
+python3 main.py -d target.com --harvest              # classified (grouped)
+python3 main.py -d target.com --harvest --raw        # all URLs, no filter
+python3 main.py -d target.com --harvest --no-subs    # main domain only
 python3 main.py -d target.com --harvest --max-urls 10000
-python3 main.py -d target.com --harvest --verify     # cek status HTTP tiap URL (semi-aktif)
+python3 main.py -d target.com --harvest --verify     # check HTTP status of each URL (semi-active)
 ```
 
-> **Catatan:** `--verify` menghubungi target langsung untuk mengecek status tiap URL, sehingga tidak lagi murni pasif. Tanpa `--verify`, kolom status di laporan tampil sebagai `-` (belum dicek).
+> **Note:** `--verify` contacts the target directly to check each URL's status, so it's no longer purely passive. Without `--verify`, the status column in the report shows `-` (not checked).
 
 ### Recon Mode — Full Reconnaissance
 
-Enumerate subdomain dari sumber passive + DNS bruteforce + permutation, verifikasi liveness, crawl setiap subdomain, dan classify semua endpoint.
+Enumerate subdomains from passive sources + DNS bruteforce + permutation, verify liveness, crawl each subdomain, and classify all endpoints.
 
 ```bash
 python3 main.py -d target.com --recon
 python3 main.py -d target.com --recon --max-subs 1000 --pages-per-sub 30
-python3 main.py -d target.com --recon --no-crawl              # subdomain list saja
+python3 main.py -d target.com --recon --no-crawl              # subdomain list only
 python3 main.py -d target.com --recon --skip-empty --timing slow
 ```
 
 ### Crawl Mode — Real-Time Spider
 
-Spider langsung ke aplikasi target, extract endpoint dari HTML dan JavaScript. Auto-render SPA bila terdeteksi.
+Spider the target application directly, extracting endpoints from HTML and JavaScript. Auto-renders SPAs when detected.
 
 ```bash
 python3 main.py -d target.com --crawl
 python3 main.py -d target.com --crawl --timing slow --max-pages 200
-python3 main.py -d target.com --crawl --spa on               # paksa browser render
+python3 main.py -d target.com --crawl --spa on               # force browser render
 python3 main.py -d target.com --crawl --seed https://app.target.com/dashboard
 ```
 
-Opsi `--spa` punya tiga nilai: `off` (HTTP saja, tercepat), `auto` (render bila terdeteksi SPA — default), dan `on` (selalu pakai browser).
+The `--spa` option has three values: `off` (HTTP only, fastest), `auto` (render when an SPA is detected — default), and `on` (always use the browser).
 
 ### OSINT Mode — Source Code Intelligence
 
-Cari endpoint yang bocor di source code publik. Tanpa traffic ke target.
+Find endpoints leaked in public source code. No traffic to the target.
 
 ```bash
 python3 main.py -d target.com
@@ -248,136 +248,140 @@ python3 main.py -d target.com --deep
 
 ### Active Mode — Wordlist Brute Force
 
-Discovery endpoint via dictionary attack. Kategori Closed (403/404) paling banyak terisi di mode ini.
+Discover endpoints via a dictionary attack. The Closed categories (403/404) fill up most in this mode.
 
 ```bash
 python3 main.py -d target.com --active
 python3 main.py -d target.com --active --wordlist custom.txt --threads 20
 ```
 
-Lihat `python3 main.py --help` untuk semua opsi.
+Run `python3 main.py --help` for all options.
 
 ---
 
 ## Stealth Timing
 
-Timing mode mengatur delay antar request dengan Gaussian distribution untuk meniru pola browsing manusia.
+Timing mode sets the delay between requests using a Gaussian distribution to mimic human browsing patterns.
 
 | Mode | Delay | Use Case |
 |------|-------|----------|
 | `fast` | 0.3 – 1.5s | Aggressive scan, lab/CTF |
-| `normal` | 1.0 – 4.0s | Default — balance kecepatan & stealth |
-| `slow` | 3.0 – 8.0s | Maximum stealth untuk target production |
-| `random` | Mix | Distribusi paling natural |
+| `normal` | 1.0 – 4.0s | Default — balances speed & stealth |
+| `slow` | 3.0 – 8.0s | Maximum stealth for production targets |
+| `random` | Mix | Most natural distribution |
 
-Set default via `STEALTH_TIMING` di `config.py`, atau override dengan `--timing`.
+Set the default via `STEALTH_TIMING` in `config.py`, or override with `--timing`.
 
 ---
 
 ## Output
 
-Hasil scan tersimpan otomatis di direktori `results/`:
+Scan results are saved automatically in the `results/` directory:
 
-| File | Isi |
-|------|-----|
-| `endpoints.txt` | Endpoint terpisah per kategori, dengan kode status |
-| `subdomains.txt` | Subdomain list per status liveness |
-| `parameters.txt` | Parameter (sensitive + regular) |
-| `harvested_urls.txt` | URL hasil harvest mode |
-| `report.html` | Report interaktif (searchable, filterable) + arsip per-scan |
-| `scan_results.json` / `recon_results.json` | Full data untuk parsing |
+| File | Contents |
+|------|----------|
+| `endpoints.txt` | Endpoints split by category, with status codes |
+| `subdomains.txt` | Subdomain list by liveness status |
+| `parameters.txt` | Parameters (sensitive + regular) |
+| `harvested_urls.txt` | URLs from harvest mode |
+| `report.html` | Interactive report (searchable, filterable) + per-scan archive |
+| `scan_results.json` / `recon_results.json` | Full data for parsing |
 
 ### Endpoint Classification
 
-Endpoint diklasifikasi berdasarkan dua dimensi: **sifat** (mengandung keyword sensitif) dan **aksesibilitas** (HTTP status response).
+Endpoints are classified along two dimensions: **nature** (contains sensitive keywords) and **accessibility** (HTTP status response).
 
-| Kategori | Kondisi | Prioritas |
-|----------|---------|-----------|
-| `PRIVATE-OPEN` | Endpoint sensitif dengan status 200 | **Tinggi** — potensial critical finding |
-| `PUBLIC-OPEN` | Endpoint umum accessible | Normal |
-| `PRIVATE-CLOSED` | Endpoint sensitif dengan status 401/403 | Medium — auth-gated |
-| `PUBLIC-CLOSED` | Endpoint umum dengan status 404 | Rendah — reference |
+| Category | Condition | Priority |
+|----------|-----------|----------|
+| `PRIVATE-OPEN` | Sensitive endpoint with status 200 | **High** — potential critical finding |
+| `PUBLIC-OPEN` | Public endpoint, accessible | Normal |
+| `PRIVATE-CLOSED` | Sensitive endpoint with status 401/403 | Medium — auth-gated |
+| `PUBLIC-CLOSED` | Public endpoint with status 404 | Low — reference |
 
-Keyword matching bersifat context-aware: path publik seperti `portal-belajar`, `e-learning`, atau login role user umum (siswa/ortu/alumni) tidak salah diklasifikasi sebagai private. Login admin/guru tetap dikelompokkan private.
+Keyword matching is context-aware: public paths like `portal-belajar`, `e-learning`, or common-user logins (student/parent/alumni) are not mislabeled as private. Admin/staff logins remain classified as private.
 
-### HTTP Status Code
+### HTTP Status Codes
 
-Laporan menampilkan kode status tiap endpoint dengan badge berwarna:
+The report shows each endpoint's status code with a colored badge:
 
-| Warna | Range | Arti |
-|-------|-------|------|
-| 🟢 Hijau | 2xx | Sukses / accessible |
-| 🔵 Biru | 3xx | Redirect |
-| 🟡 Kuning | 401, 403 | Butuh autentikasi / forbidden |
-| 🔴 Merah | 4xx, 5xx | Client / server error |
+| Color | Range | Meaning |
+|-------|-------|---------|
+| 🟢 Green | 2xx | Success / accessible |
+| 🔵 Blue | 3xx | Redirect |
+| 🟡 Yellow | 401, 403 | Auth required / forbidden |
+| 🔴 Red | 4xx, 5xx | Client / server error |
 
 ### Subdomain Liveness Status
 
-| Status | Kondisi |
-|--------|---------|
-| `LIVE` | DNS resolve, HTTP responsif, konten aplikasi terdeteksi |
-| `REACHABLE_EMPTY` | HTTP respond tapi parking page / default landing |
-| `DNS_ONLY` | DNS resolve tapi HTTP tidak responsif |
-| `DEAD` | DNS tidak resolve |
+| Status | Condition |
+|--------|-----------|
+| `LIVE` | DNS resolves, HTTP responsive, application content detected |
+| `REACHABLE_EMPTY` | HTTP responds but parking page / default landing |
+| `DNS_ONLY` | DNS resolves but HTTP not responsive |
+| `DEAD` | DNS does not resolve |
 
 ---
 
 ## Configuration
 
-Semua default dapat di-override via `config.py`. Setting utama:
+All defaults can be overridden via `config.py`. Main settings:
 
-| Variable | Default | Deskripsi |
-|----------|---------|-----------|
+| Variable | Default | Description |
+|----------|---------|-------------|
 | `STEALTH_TIMING` | `"normal"` | Default timing mode |
-| `SPA_MODE` | `"auto"` | Rendering SPA: off / auto / on |
-| `CRAWL_MAX_PAGES` | `100` | Batas crawl per session |
-| `RECON_MAX_SUBS` | `500` | Batas enumerasi subdomain |
-| `THREADS` | `10` | Paralel worker active scan |
-| `GITHUB_TOKEN` | `""` | Token untuk raise rate limit OSINT |
-| `DISCORD_WEBHOOK_URL` | `""` | Webhook notifikasi Discord |
+| `SPA_MODE` | `"auto"` | SPA rendering: off / auto / on |
+| `CRAWL_MAX_PAGES` | `100` | Crawl limit per session |
+| `RECON_MAX_SUBS` | `500` | Subdomain enumeration limit |
+| `THREADS` | `10` | Parallel workers for active scan |
+| `GITHUB_TOKEN` | `""` | Token to raise OSINT rate limit |
+| `DISCORD_WEBHOOK_URL` | `""` | Discord notification webhook |
 
 ---
 
 ## FAQ
 
-**Kenapa hasil harvest kadang ribuan, kadang cuma puluhan?**
-Sumber arsip terbesar (Wayback Machine) kadang lambat atau timeout. Saat itu terjadi, jumlah URL turun drastis karena hanya sumber lain yang terkumpul. ShadowPath sudah menerapkan retry otomatis; kamu juga bisa memperkecil beban query dengan `--max-urls`.
+**Why does harvest sometimes return thousands of URLs and sometimes just a few?**
+The largest archive source (Wayback Machine) is sometimes slow or times out. When that happens, the URL count drops sharply because only the other sources are collected. ShadowPath already applies automatic retries; you can also lighten the query load with `--max-urls`.
 
-**Report HTML saya kosong / target-nya "Unknown", kenapa?**
-Biasanya karena membuka `report.html` dari scan lama yang sudah tertimpa scan baru, atau target adalah SPA yang tidak dirender. Cek header laporan (`Generated:`) untuk memastikan waktunya, dan gunakan file arsip `report_<target>_<waktu>.html`.
+**My HTML report is empty / the target shows "Unknown", why?**
+Usually because you opened a `report.html` from an old scan that was overwritten by a newer one, or the target is an SPA that wasn't rendered. Check the report header (`Generated:`) for the timestamp, and use the archived `report_<target>_<time>.html` file.
 
-**Kolom status endpoint tampil `-` di mode harvest, apakah bug?**
-Bukan. Harvest bersifat pasif — URL diambil dari arsip tanpa request ke target, jadi status HTTP belum diketahui. Tambahkan `--verify` bila ingin mengecek status (menjadi semi-aktif).
+**The endpoint status shows `-` in harvest mode, is that a bug?**
+No. Harvest is passive — URLs come from archives without any request to the target, so the HTTP status is unknown. Add `--verify` if you want to check the status (this makes it semi-active).
 
-**SPA saya tidak menghasilkan link (URLs found: 0) padahal ukuran halaman besar.**
-Itu ciri SPA: HTML mentah kosong, konten dirender JavaScript. Jalankan dengan `--spa on` dan pastikan Playwright + Chromium sudah terpasang.
+**My SPA returns no links (URLs found: 0) even though the page size is large.**
+That's the hallmark of an SPA: the raw HTML is empty and content is rendered by JavaScript. Run with `--spa on` and make sure Playwright + Chromium are installed.
 
 ---
 
 ## Legal & Ethics
 
-> **Gunakan hanya pada target dengan izin eksplisit.**
+> **Use only on targets you have explicit permission to test.**
 
-Kategori penggunaan legal:
+Legal usage categories:
 
-- Lab lokal atau virtual machine milik sendiri
-- Platform CTF (HackTheBox, TryHackMe, PortSwigger Academy)
-- Program bug bounty — **wajib in-scope**, cek scope di HackerOne/Bugcrowd/Intigriti
-- Pentest engagement dengan authorization tertulis dari klien
+- Local labs or your own virtual machines
+- CTF platforms (HackTheBox, TryHackMe, PortSwigger Academy)
+- Bug bounty programs — **must be in-scope**, check scope on HackerOne/Bugcrowd/Intigriti
+- Pentest engagements with written client authorization
 
-Untuk latihan aman, tersedia target legal resmi milik Acunetix: `testphp.vulnweb.com`, `testasp.vulnweb.com`, `testaspnet.vulnweb.com`, dan `testhtml5.vulnweb.com`.
+For safe practice, official legal targets by Acunetix are available: `testphp.vulnweb.com`, `testasp.vulnweb.com`, `testaspnet.vulnweb.com`, and `testhtml5.vulnweb.com`.
 
-**Perhatian untuk Recon & Harvest Mode:** kedua mode ini dapat menghasilkan volume request atau data yang besar. Meskipun Harvest bersifat pasif (mengambil dari arsip pihak ketiga), tetap pastikan aktivitas reconnaissance-mu terhadap suatu target berada dalam ruang lingkup yang diizinkan.
+**Note on Recon & Harvest modes:** both can generate a large volume of requests or data. Although Harvest is passive (pulling from third-party archives), make sure your reconnaissance activity against a target stays within an authorized scope.
 
-Penggunaan tanpa izin melanggar hukum di banyak negara. Di Indonesia, melanggar **UU ITE Pasal 30** dengan ancaman pidana penjara hingga 8 tahun dan denda hingga 800 juta rupiah. Author tidak bertanggung jawab atas penyalahgunaan tool ini.
+Unauthorized use is illegal in many countries. In Indonesia, it violates **Law ITE Article 30**, carrying up to 8 years imprisonment and fines up to IDR 800 million.
+
+### Disclaimer
+
+This tool is provided "as is". The author is not responsible for any actions taken by users. All risk and responsibility lie entirely with the user.
 
 ---
 
 ## Contributing
 
-Contributions welcome. Untuk perubahan besar, buka issue terlebih dahulu untuk diskusi.
+Contributions welcome. For major changes, open an issue first to discuss.
 
-Langkah umum: fork repo → buat branch fitur (`git checkout -b fitur-baru`) → commit perubahan → push → buka Pull Request.
+General flow: fork the repo → create a feature branch (`git checkout -b new-feature`) → commit your changes → push → open a Pull Request.
 
 ---
 
