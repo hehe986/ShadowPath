@@ -505,6 +505,22 @@ def run_harvest(target: str, args) -> dict:
     harvest_result = harvester.harvest()
     urls = harvest_result["urls"]
 
+    # ── VERIFY opsional: cek status code tiap URL (semi-aktif) ──
+    status_map = {}
+    if getattr(args, "verify", False) and urls:
+        print()
+        Logger.section(f"VERIFY — cek status {len(urls)} URL (semi-aktif)")
+        Logger.warn("Mode verify menghubungi target langsung (bukan pasif lagi)")
+        from core.validator import Validator
+        v = Validator(timeout=config.REQUEST_TIMEOUT)
+        for i, u in enumerate(urls, 1):
+            if i % 50 == 0 or i == len(urls):
+                print(f"  [{i}/{len(urls)}] checking...")
+            res = v.validate(u)
+            if res and res.get("status_code") is not None:
+                status_map[u] = res["status_code"]
+        Logger.success(f"Verified: {len(status_map)} URL responsif")
+
     # ── Klasifikasi SEMUA url (dipakai baik raw maupun classified) ──
     from core.classifier import EndpointClassifier
     clf = EndpointClassifier()
@@ -515,6 +531,9 @@ def run_harvest(target: str, args) -> dict:
             buckets["private_open"].append(u)
         else:
             buckets["public_open"].append(u)
+
+    # Bangun validated list dari status_map (buat badge status di report)
+    validated_list = [{"url": u, "status_code": sc} for u, sc in status_map.items()]
 
     # ── OUTPUT: raw atau classified ──
     if args.raw:
@@ -532,6 +551,7 @@ def run_harvest(target: str, args) -> dict:
             "raw": True,
             "urls": urls,
             "classified": buckets,   # tetap sertakan biar report punya badge
+            "validated": validated_list,  # status code (kalau --verify)
             "total": len(urls),
             "by_source": harvest_result["by_source"],
         }
@@ -555,6 +575,7 @@ def run_harvest(target: str, args) -> dict:
             "raw": False,
             "classified": buckets,
             "urls": urls,
+            "validated": validated_list,  # status code (kalau --verify)
             "total": len(urls),
             "by_source": harvest_result["by_source"],
         }
@@ -626,6 +647,9 @@ def main():
     harvest_grp.add_argument("--max-urls",
         type=int, default=0,
         help="Batas maksimum URL yang di-harvest (default: 50000)")
+    harvest_grp.add_argument("--verify",
+        action="store_true",
+        help="Cek status HTTP tiap URL hasil harvest (semi-aktif — menghubungi target)")
 
     # ── OUTPUT & NOTIFICATION ──
     out_grp = parser.add_argument_group("Output & Notification")
