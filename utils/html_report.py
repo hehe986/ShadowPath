@@ -65,17 +65,18 @@ class HTMLReport:
             }
         # Harvest mode
         if data.get("mode") == "harvest":
-            if data.get("raw"):
-                # Raw: semua URL flat di public_open (report jadi list searchable)
+            # Baik raw maupun classified: pakai bucket classified kalau ada
+            # (raw mode kini juga menyertakan classified untuk badge di report)
+            c = data.get("classified", {})
+            if c:
                 return {
-                    "private_open": [], "public_open": data.get("urls", []),
+                    "private_open":   c.get("private_open", []),
+                    "public_open":    c.get("public_open", []),
                     "private_closed": [], "public_closed": [],
                 }
-            # Classified: pakai bucket private/public
-            c = data.get("classified", {})
+            # fallback: semua flat di public
             return {
-                "private_open":   c.get("private_open", []),
-                "public_open":    c.get("public_open", []),
+                "private_open": [], "public_open": data.get("urls", []),
                 "private_closed": [], "public_closed": [],
             }
         # Crawl/active mode
