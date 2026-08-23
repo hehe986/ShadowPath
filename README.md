@@ -23,6 +23,23 @@
 
 ---
 
+## Daftar Isi
+
+- [Overview](#overview)
+- [Kenapa ShadowPath?](#kenapa-shadowpath)
+- [Key Features](#key-features)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Usage](#usage)
+- [Stealth Timing](#stealth-timing)
+- [Output](#output)
+- [Configuration](#configuration)
+- [FAQ](#faq)
+- [Legal & Ethics](#legal--ethics)
+- [Contributing](#contributing)
+
+---
+
 ## Overview
 
 ShadowPath menggabungkan beberapa teknik reconnaissance dalam satu tool dengan output terstruktur dan stealth layer built-in. Lima mode operasi mencakup kebutuhan dari passive intelligence gathering sampai active reconnaissance ber-render JavaScript.
@@ -37,6 +54,16 @@ ShadowPath menggabungkan beberapa teknik reconnaissance dalam satu tool dengan o
 
 ---
 
+## Kenapa ShadowPath?
+
+Kebanyakan tool discovery hanya memuntahkan daftar URL mentah — kamu dapat ribuan baris tanpa tahu mana yang penting. ShadowPath berbeda pada tiga hal:
+
+- **Hasil terklasifikasi, bukan daftar mentah.** Setiap endpoint dikelompokkan berdasarkan sifat (sensitif/umum) dan aksesibilitas (terbuka/terkunci), jadi kamu langsung tahu mana yang layak diperiksa duluan.
+- **Multi-sumber dalam satu tool.** Passive archive, live crawl, subdomain enum, dan source-code intelligence — tidak perlu merangkai lima tool berbeda secara manual.
+- **Context-aware.** Tidak asal menandai `login` sebagai sensitif; path publik seperti `portal-belajar` atau login siswa dikenali sebagai umum, mengurangi false positive.
+
+---
+
 ## Key Features
 
 - **Passive URL harvesting** — kumpulkan ribuan URL historis dari Wayback Machine, Common Crawl, AlienVault OTX, dan URLScan tanpa menyentuh target
@@ -45,9 +72,10 @@ ShadowPath menggabungkan beberapa teknik reconnaissance dalam satu tool dengan o
 - **Liveness verification** — DNS + HTTP probe, deteksi parking page & soft-error (503 di balik status 200)
 - **Stealth layer** — UA rotation, Gaussian timing jitter, header mimicry, noise interleaving
 - **4-way endpoint classification** — memisahkan sifat (public/private) × aksesibilitas (open/closed), dengan context-aware keyword matching
+- **HTTP status code** — kode status (200/403/404/…) ditampilkan di endpoints.txt dan report HTML, dengan badge berwarna
 - **Tech fingerprint** — deteksi server, framework, CMS, JS library, CDN, WAF, analytics
 - **Parameter extraction** — query, form, JSON keys, sensitive param detection
-- **Interactive HTML report** — searchable, filterable, dark theme
+- **Interactive HTML report** — searchable, filterable, dark theme, arsip per-scan (tidak saling menimpa)
 - **Notifikasi** — Discord & Telegram webhook
 
 ---
@@ -149,6 +177,24 @@ pip install -r requirements.txt --break-system-packages
 
 ---
 
+## Quick Start
+
+Baru pertama kali? Coba tiga langkah ini di target latihan legal (`testphp.vulnweb.com` milik Acunetix):
+
+```bash
+# 1. Crawl cepat — lihat endpoint yang ter-link
+python3 main.py -d testphp.vulnweb.com --crawl --max-pages 5 --timing fast
+
+# 2. Harvest — kumpulkan URL historis dari arsip publik
+python3 main.py -d testphp.vulnweb.com --harvest --raw
+
+# 3. Buka laporan interaktif
+#   Linux/macOS: xdg-open results/report.html
+#   Windows    : start results\report.html
+```
+
+---
+
 ## Usage
 
 ### Harvest Mode — Passive URL Discovery
@@ -160,7 +206,10 @@ python3 main.py -d target.com --harvest              # classified (dikelompokkan
 python3 main.py -d target.com --harvest --raw        # semua URL tanpa filter
 python3 main.py -d target.com --harvest --no-subs    # domain utama saja
 python3 main.py -d target.com --harvest --max-urls 10000
+python3 main.py -d target.com --harvest --verify     # cek status HTTP tiap URL (semi-aktif)
 ```
+
+> **Catatan:** `--verify` menghubungi target langsung untuk mengecek status tiap URL, sehingga tidak lagi murni pasif. Tanpa `--verify`, kolom status di laporan tampil sebagai `-` (belum dicek).
 
 ### Recon Mode — Full Reconnaissance
 
@@ -183,6 +232,8 @@ python3 main.py -d target.com --crawl --timing slow --max-pages 200
 python3 main.py -d target.com --crawl --spa on               # paksa browser render
 python3 main.py -d target.com --crawl --seed https://app.target.com/dashboard
 ```
+
+Opsi `--spa` punya tiga nilai: `off` (HTTP saja, tercepat), `auto` (render bila terdeteksi SPA — default), dan `on` (selalu pakai browser).
 
 ### OSINT Mode — Source Code Intelligence
 
@@ -229,11 +280,11 @@ Hasil scan tersimpan otomatis di direktori `results/`:
 
 | File | Isi |
 |------|-----|
-| `endpoints.txt` | Endpoint terpisah per kategori |
+| `endpoints.txt` | Endpoint terpisah per kategori, dengan kode status |
 | `subdomains.txt` | Subdomain list per status liveness |
 | `parameters.txt` | Parameter (sensitive + regular) |
 | `harvested_urls.txt` | URL hasil harvest mode |
-| `report.html` | Report interaktif (searchable, filterable) |
+| `report.html` | Report interaktif (searchable, filterable) + arsip per-scan |
 | `scan_results.json` / `recon_results.json` | Full data untuk parsing |
 
 ### Endpoint Classification
@@ -247,7 +298,18 @@ Endpoint diklasifikasi berdasarkan dua dimensi: **sifat** (mengandung keyword se
 | `PRIVATE-CLOSED` | Endpoint sensitif dengan status 401/403 | Medium — auth-gated |
 | `PUBLIC-CLOSED` | Endpoint umum dengan status 404 | Rendah — reference |
 
-Keyword matching bersifat context-aware: path publik seperti `portal-belajar`, `e-learning`, atau login role user umum (siswa/ortu/alumni) tidak salah diklasifikasi sebagai private.
+Keyword matching bersifat context-aware: path publik seperti `portal-belajar`, `e-learning`, atau login role user umum (siswa/ortu/alumni) tidak salah diklasifikasi sebagai private. Login admin/guru tetap dikelompokkan private.
+
+### HTTP Status Code
+
+Laporan menampilkan kode status tiap endpoint dengan badge berwarna:
+
+| Warna | Range | Arti |
+|-------|-------|------|
+| 🟢 Hijau | 2xx | Sukses / accessible |
+| 🔵 Biru | 3xx | Redirect |
+| 🟡 Kuning | 401, 403 | Butuh autentikasi / forbidden |
+| 🔴 Merah | 4xx, 5xx | Client / server error |
 
 ### Subdomain Liveness Status
 
@@ -276,6 +338,22 @@ Semua default dapat di-override via `config.py`. Setting utama:
 
 ---
 
+## FAQ
+
+**Kenapa hasil harvest kadang ribuan, kadang cuma puluhan?**
+Sumber arsip terbesar (Wayback Machine) kadang lambat atau timeout. Saat itu terjadi, jumlah URL turun drastis karena hanya sumber lain yang terkumpul. ShadowPath sudah menerapkan retry otomatis; kamu juga bisa memperkecil beban query dengan `--max-urls`.
+
+**Report HTML saya kosong / target-nya "Unknown", kenapa?**
+Biasanya karena membuka `report.html` dari scan lama yang sudah tertimpa scan baru, atau target adalah SPA yang tidak dirender. Cek header laporan (`Generated:`) untuk memastikan waktunya, dan gunakan file arsip `report_<target>_<waktu>.html`.
+
+**Kolom status endpoint tampil `-` di mode harvest, apakah bug?**
+Bukan. Harvest bersifat pasif — URL diambil dari arsip tanpa request ke target, jadi status HTTP belum diketahui. Tambahkan `--verify` bila ingin mengecek status (menjadi semi-aktif).
+
+**SPA saya tidak menghasilkan link (URLs found: 0) padahal ukuran halaman besar.**
+Itu ciri SPA: HTML mentah kosong, konten dirender JavaScript. Jalankan dengan `--spa on` dan pastikan Playwright + Chromium sudah terpasang.
+
+---
+
 ## Legal & Ethics
 
 > **Gunakan hanya pada target dengan izin eksplisit.**
@@ -287,6 +365,8 @@ Kategori penggunaan legal:
 - Program bug bounty — **wajib in-scope**, cek scope di HackerOne/Bugcrowd/Intigriti
 - Pentest engagement dengan authorization tertulis dari klien
 
+Untuk latihan aman, tersedia target legal resmi milik Acunetix: `testphp.vulnweb.com`, `testasp.vulnweb.com`, `testaspnet.vulnweb.com`, dan `testhtml5.vulnweb.com`.
+
 **Perhatian untuk Recon & Harvest Mode:** kedua mode ini dapat menghasilkan volume request atau data yang besar. Meskipun Harvest bersifat pasif (mengambil dari arsip pihak ketiga), tetap pastikan aktivitas reconnaissance-mu terhadap suatu target berada dalam ruang lingkup yang diizinkan.
 
 Penggunaan tanpa izin melanggar hukum di banyak negara. Di Indonesia, melanggar **UU ITE Pasal 30** dengan ancaman pidana penjara hingga 8 tahun dan denda hingga 800 juta rupiah. Author tidak bertanggung jawab atas penyalahgunaan tool ini.
@@ -296,6 +376,8 @@ Penggunaan tanpa izin melanggar hukum di banyak negara. Di Indonesia, melanggar 
 ## Contributing
 
 Contributions welcome. Untuk perubahan besar, buka issue terlebih dahulu untuk diskusi.
+
+Langkah umum: fork repo → buat branch fitur (`git checkout -b fitur-baru`) → commit perubahan → push → buka Pull Request.
 
 ---
 
