@@ -511,8 +511,8 @@ def run_harvest(target: str, args) -> dict:
         print()
         Logger.section(f"VERIFY — cek status {len(urls)} URL (semi-aktif)")
         Logger.warn("Mode verify menghubungi target langsung (bukan pasif lagi)")
-        from core.validator import Validator
-        v = Validator(timeout=config.REQUEST_TIMEOUT)
+        from core.validator import EndpointValidator
+        v = EndpointValidator(timeout=config.REQUEST_TIMEOUT)
         for i, u in enumerate(urls, 1):
             if i % 50 == 0 or i == len(urls):
                 print(f"  [{i}/{len(urls)}] checking...")
