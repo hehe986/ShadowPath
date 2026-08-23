@@ -762,7 +762,7 @@ def main():
         save_results(target, result)
 
     # ── HTML REPORT ──
-    if result and getattr(config, "GENERATE_HTML_REPORT", False) and not args.no_html and not (getattr(args,"harvest",False) and getattr(args,"raw",False)):
+    if result and getattr(config, "GENERATE_HTML_REPORT", False) and not args.no_html:
         try:
             from utils.html_report import HTMLReport
             import os, re
