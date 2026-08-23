@@ -236,7 +236,7 @@ def save_results(target: str, result: dict):
     json_payload = {
         "meta": {
             "tool":    "ShadowPath Hidden Endpoint Discovery Engine",
-            "version": "2.1.0",
+            "version": "2.2.0",
             "target":  target,
             "mode":    mode,
         },
@@ -481,11 +481,93 @@ def _save_recon_results(result: dict):
 
 
 # =========================
+# 🌾 HARVEST MODE (passive URL dari arsip)
+# =========================
+def run_harvest(target: str, args) -> dict:
+    from core.url_harvester import URLHarvester
+
+    Logger.section("HARVEST MODE — Passive URL Discovery")
+    Logger.info("Sumber: Wayback, Common Crawl, OTX, URLScan (semua pasif)")
+    print()
+
+    harvester = URLHarvester(
+        target_domain=target,
+        include_subs=not args.no_subs,
+        max_urls=args.max_urls or 50000,
+    )
+    harvest_result = harvester.harvest()
+    urls = harvest_result["urls"]
+
+    # ── OUTPUT: raw atau classified ──
+    if args.raw:
+        # Mode RAW: tampilkan semua URL apa adanya (kayak gau)
+        Logger.section(f"RAW OUTPUT ({len(urls)} URL)")
+        for u in urls:
+            print(u)
+        result = {
+            "mode": "harvest",
+            "target": target,
+            "raw": True,
+            "urls": urls,
+            "total": len(urls),
+            "by_source": harvest_result["by_source"],
+        }
+    else:
+        # Mode CLASSIFIED: kelompokkan pakai classifier 4-way
+        from core.classifier import EndpointClassifier
+        clf = EndpointClassifier()
+        buckets = {"private_open": [], "public_open": []}
+        # Harvest = URL dari arsip, statusnya unknown → klasifikasi by keyword saja
+        for u in urls:
+            kind = clf.classify(u)
+            if kind in ("sensitive", "hidden"):
+                buckets["private_open"].append(u)
+            else:
+                buckets["public_open"].append(u)
+
+        Logger.section("CLASSIFIED OUTPUT")
+        print(f"  Total URL       : {len(urls)}")
+        print(f"  ⚠️  Private/Sensitif : {len(buckets['private_open'])}")
+        print(f"  ✅ Public          : {len(buckets['public_open'])}")
+        print()
+        if buckets["private_open"]:
+            Logger.section("PRIVATE / SENSITIVE URLs")
+            for u in buckets["private_open"][:50]:
+                print(f"  {u}")
+            if len(buckets["private_open"]) > 50:
+                print(f"  ... +{len(buckets['private_open'])-50} lagi (cek file output)")
+
+        result = {
+            "mode": "harvest",
+            "target": target,
+            "raw": False,
+            "classified": buckets,
+            "urls": urls,
+            "total": len(urls),
+            "by_source": harvest_result["by_source"],
+        }
+
+    # ── SAVE ──
+    import os
+    os.makedirs(config.RESULTS_DIR, exist_ok=True)
+    out_file = f"{config.RESULTS_DIR}/harvested_urls.txt"
+    with open(out_file, "w", encoding="utf-8") as f:
+        f.write(f"# ShadowPath Harvest - {target}\n")
+        f.write(f"# Total: {len(urls)} URL\n")
+        f.write(f"# Sources: {harvest_result['by_source']}\n\n")
+        for u in urls:
+            f.write(u + "\n")
+    Logger.success(f"Saved: {out_file}")
+
+    return result
+
+
+# =========================
 # 🚀 MAIN
 # =========================
 def main():
     parser = argparse.ArgumentParser(
-        description="ShadowPath v2.1.0 — Hidden Endpoint Discovery Engine",
+        description="ShadowPath v2.2.0 — Hidden Endpoint Discovery Engine",
         formatter_class=argparse.RawTextHelpFormatter,
     )
 
@@ -517,6 +599,21 @@ def main():
     parser.add_argument("--debug",
         action="store_true",
         help="Enable debug output")
+
+    # ── HARVEST MODE ──
+    harvest_grp = parser.add_argument_group("Harvest Mode (--harvest)")
+    harvest_grp.add_argument("--harvest",
+        action="store_true",
+        help="Passive URL harvest dari arsip (Wayback, Common Crawl, OTX, URLScan)")
+    harvest_grp.add_argument("--raw",
+        action="store_true",
+        help="Tampilkan semua URL tanpa filter/klasifikasi (kayak gau)")
+    harvest_grp.add_argument("--no-subs",
+        action="store_true",
+        help="Hanya domain utama, skip subdomain")
+    harvest_grp.add_argument("--max-urls",
+        type=int, default=0,
+        help="Batas maksimum URL yang di-harvest (default: 50000)")
 
     # ── OUTPUT & NOTIFICATION ──
     out_grp = parser.add_argument_group("Output & Notification")
@@ -628,7 +725,9 @@ def main():
         return
 
     Logger.info(f"Target  : {target}")
-    if args.recon:
+    if args.harvest:
+        mode_label = "HARVEST"
+    elif args.recon:
         mode_label = "RECON"
     elif args.crawl:
         mode_label = "CRAWL"
@@ -644,7 +743,9 @@ def main():
     start_time = time.time()
 
     # ── RUN ──
-    if args.recon:
+    if args.harvest:
+        result = run_harvest(target, args)
+    elif args.recon:
         result = run_recon_scan(target, args)
     elif args.crawl:
         result = run_crawl_scan(target, args)
@@ -657,11 +758,11 @@ def main():
 
     # ── SAVE ──
     # Recon mode punya save handler sendiri (_save_recon_results)
-    if config.SAVE_RESULTS and result and not args.recon:
+    if config.SAVE_RESULTS and result and not args.recon and not args.harvest:
         save_results(target, result)
 
     # ── HTML REPORT ──
-    if result and getattr(config, "GENERATE_HTML_REPORT", False) and not args.no_html:
+    if result and getattr(config, "GENERATE_HTML_REPORT", False) and not args.no_html and not (getattr(args,"harvest",False) and getattr(args,"raw",False)):
         try:
             from utils.html_report import HTMLReport
             import os, re
