@@ -251,12 +251,19 @@ def save_results(target: str, result: dict):
         "scored":             result.get("endpoint_data", {}).get("scored", []),
     }
 
+    # Build status_map url -> status_code dari raw hasil validasi
+    status_map = {}
+    for item in (result.get("raw") or result.get("validated") or []):
+        if isinstance(item, dict) and item.get("url") and item.get("status_code") is not None:
+            status_map[item["url"]] = item["status_code"]
+
     OutputFormatter.save_txt(
         config.ENDPOINTS_FILE,
         classified,
         param_data,
         dup_analysis,
         target,
+        status_map,
     )
 
     OutputFormatter.save_json(config.JSON_FILE, json_payload)
