@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ShadowPath — Hidden Endpoint Discovery Engine</title>
+<meta name="description" content="ShadowPath: reconnaissance engine untuk pentest & bug bounty. Passive URL harvesting, SPA-aware crawling, subdomain enumeration, dengan klasifikasi 4-arah.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a0e12;
+    --bg-2:#0f151b;
+    --panel:#121a22;
+    --panel-2:#0d141a;
+    --line:#1e2a35;
+    --green:#4ade80;
+    --green-dim:#2faa5a;
+    --green-glow:rgba(74,222,128,.35);
+    --blue:#5b8cff;
+    --violet:#a879ff;
+    --text:#d6e2ea;
+    --muted:#7d93a3;
+    --faint:#4a5a68;
+    --amber:#f5b74e;
+    --red:#ff6b6b;
+    --mono:'JetBrains Mono',ui-monospace,monospace;
+    --sans:'Space Grotesk',system-ui,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--sans);
+    line-height:1.6;
+    overflow-x:hidden;
+    -webkit-font-smoothing:antialiased;
+  }
+  /* ambient grid + glow */
+  body::before{
+    content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
+    background:
+      radial-gradient(900px 500px at 78% -8%, rgba(91,140,255,.10), transparent 60%),
+      radial-gradient(800px 500px at 10% 8%, rgba(168,121,255,.08), transparent 60%),
+      linear-gradient(var(--line) 1px,transparent 1px),
+      linear-gradient(90deg,var(--line) 1px,transparent 1px);
+    background-size:auto,auto,44px 44px,44px 44px;
+    opacity:.5;
+    mask-image:linear-gradient(180deg,#000 0%,#000 60%,transparent 100%);
+  }
+  .wrap{max-width:1140px;margin:0 auto;padding:0 24px;position:relative;z-index:1}
+  a{color:inherit;text-decoration:none}
+
+  /* ---- NAV ---- */
+  nav{
+    position:sticky;top:0;z-index:50;
+    backdrop-filter:blur(12px);
+    background:rgba(10,14,18,.72);
+    border-bottom:1px solid var(--line);
+  }
+  .nav-in{display:flex;align-items:center;justify-content:space-between;height:62px}
+  .brand{display:flex;align-items:center;gap:10px;font-family:var(--mono);font-weight:800;letter-spacing:.5px}
+  .brand .dot{width:9px;height:9px;border-radius:50%;background:var(--green);box-shadow:0 0 12px var(--green-glow);animation:pulse 2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+  .brand b{color:var(--green)}
+  .nav-links{display:flex;gap:28px;font-size:14px;font-family:var(--mono)}
+  .nav-links a{color:var(--muted);transition:color .2s}
+  .nav-links a:hover{color:var(--green)}
+  .nav-cta{
+    font-family:var(--mono);font-size:13px;padding:8px 16px;border:1px solid var(--green-dim);
+    border-radius:6px;color:var(--green);transition:all .2s
+  }
+  .nav-cta:hover{background:var(--green);color:#04140a;box-shadow:0 0 20px var(--green-glow)}
+  .menu-btn{display:none;background:none;border:none;color:var(--green);font-family:var(--mono);font-size:22px;cursor:pointer}
+
+  /* ---- HERO ---- */
+  .hero{padding:70px 0 40px;display:grid;grid-template-columns:1.05fr 1fr;gap:48px;align-items:center}
+  .eyebrow{
+    display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:12.5px;
+    color:var(--green);border:1px solid var(--green-dim);border-radius:100px;padding:5px 13px;margin-bottom:22px;
+    background:rgba(74,222,128,.05)
+  }
+  .eyebrow .v{color:var(--muted)}
+  h1{
+    font-size:clamp(36px,5.5vw,60px);line-height:1.02;font-weight:700;letter-spacing:-1.5px;margin-bottom:20px
+  }
+  h1 .grad{
+    background:linear-gradient(100deg,var(--green),var(--blue) 55%,var(--violet));
+    -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent
+  }
+  .hero p.lead{font-size:18px;color:var(--muted);max-width:520px;margin-bottom:30px}
+  .hero-btns{display:flex;gap:14px;flex-wrap:wrap}
+  .btn{
+    font-family:var(--mono);font-size:14px;font-weight:500;padding:13px 22px;border-radius:8px;
+    display:inline-flex;align-items:center;gap:9px;transition:all .2s;cursor:pointer;border:1px solid transparent
+  }
+  .btn-primary{background:var(--green);color:#04140a;font-weight:700}
+  .btn-primary:hover{box-shadow:0 0 26px var(--green-glow);transform:translateY(-2px)}
+  .btn-ghost{border-color:var(--line);color:var(--text)}
+  .btn-ghost:hover{border-color:var(--blue);color:var(--blue)}
+  .hero-stats{display:flex;gap:30px;margin-top:38px}
+  .hstat .n{font-family:var(--mono);font-size:26px;font-weight:800;color:var(--text)}
+  .hstat .n b{color:var(--green)}
+  .hstat .l{font-size:12.5px;color:var(--faint);font-family:var(--mono)}
+
+  /* ---- TERMINAL ---- */
+  .term{
+    background:linear-gradient(180deg,var(--panel),var(--panel-2));
+    border:1px solid var(--line);border-radius:12px;overflow:hidden;
+    box-shadow:0 30px 80px -20px rgba(0,0,0,.7),0 0 0 1px rgba(74,222,128,.04);
+  }
+  .term-bar{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--line);background:rgba(0,0,0,.25)}
+  .term-bar .c{width:12px;height:12px;border-radius:50%}
+  .c.r{background:#ff5f57}.c.y{background:#febc2e}.c.g{background:#28c840}
+  .term-title{margin-left:10px;font-family:var(--mono);font-size:12px;color:var(--faint)}
+  .term-body{padding:18px;font-family:var(--mono);font-size:13px;line-height:1.75;min-height:340px}
+  .term-body .line{white-space:pre-wrap;word-break:break-word}
+  .prompt-user{color:var(--green)}
+  .prompt-path{color:var(--blue)}
+  .cmd{color:var(--text)}
+  .ok{color:var(--green)}.warn{color:var(--amber)}.info{color:var(--blue)}.dim{color:var(--faint)}.vio{color:var(--violet)}
+  .tag-po{color:#04140a;background:var(--green);padding:1px 7px;border-radius:4px;font-size:11px;font-weight:700}
+  .tag-pc{color:#1a0f00;background:var(--amber);padding:1px 7px;border-radius:4px;font-size:11px;font-weight:700}
+  .cursor{display:inline-block;width:9px;height:16px;background:var(--green);vertical-align:middle;animation:blink 1s steps(2) infinite;box-shadow:0 0 8px var(--green-glow)}
+  @keyframes blink{0%,50%{opacity:1}51%,100%{opacity:0}}
+
+  /* ---- SECTIONS ---- */
+  section{padding:64px 0;position:relative;z-index:1}
+  .sec-head{margin-bottom:40px}
+  .sec-tag{font-family:var(--mono);font-size:13px;color:var(--green);letter-spacing:1px}
+  .sec-tag::before{content:"// ";color:var(--faint)}
+  h2{font-size:clamp(26px,3.5vw,38px);font-weight:700;letter-spacing:-1px;margin-top:8px}
+  .sec-head p{color:var(--muted);margin-top:12px;max-width:640px}
+
+  /* feature grid */
+  .feat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+  .feat{
+    background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:24px;
+    transition:all .25s;position:relative;overflow:hidden
+  }
+  .feat::after{content:"";position:absolute;inset:0;border-radius:12px;padding:1px;
+    background:linear-gradient(120deg,transparent,transparent);pointer-events:none;transition:.25s}
+  .feat:hover{transform:translateY(-4px);border-color:var(--green-dim)}
+  .feat:hover .fi{color:var(--green);border-color:var(--green-dim);box-shadow:0 0 18px var(--green-glow)}
+  .fi{
+    width:44px;height:44px;border-radius:9px;border:1px solid var(--line);display:flex;align-items:center;
+    justify-content:center;font-family:var(--mono);font-size:20px;color:var(--blue);margin-bottom:16px;transition:.25s
+  }
+  .feat h3{font-size:17px;font-weight:600;margin-bottom:8px;font-family:var(--mono)}
+  .feat p{font-size:14px;color:var(--muted)}
+
+  /* modes */
+  .modes{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+  .mode{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px 16px;text-align:center;transition:.2s}
+  .mode:hover{border-color:var(--blue);transform:translateY(-3px)}
+  .mode .mn{font-family:var(--mono);font-weight:700;color:var(--green);font-size:15px;margin-bottom:6px}
+  .mode .md{font-size:12px;color:var(--muted)}
+  .mode .imp{margin-top:10px;font-family:var(--mono);font-size:10.5px;padding:3px 8px;border-radius:100px;display:inline-block}
+  .imp.zero{background:rgba(74,222,128,.12);color:var(--green)}
+  .imp.low{background:rgba(91,140,255,.12);color:var(--blue)}
+  .imp.med{background:rgba(245,183,78,.12);color:var(--amber)}
+  .imp.high{background:rgba(255,107,107,.12);color:var(--red)}
+
+  /* report mockup */
+  .report{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;box-shadow:0 24px 60px -24px rgba(0,0,0,.6)}
+  .report-top{padding:18px 22px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
+  .report-top .rt{font-family:var(--mono);font-weight:700;font-size:16px}
+  .report-top .rt b{color:var(--green)}
+  .report-meta{font-family:var(--mono);font-size:12px;color:var(--faint)}
+  .stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line)}
+  .scard{background:var(--panel);padding:18px;text-align:center}
+  .scard .num{font-family:var(--mono);font-size:26px;font-weight:800}
+  .scard .lab{font-size:11.5px;color:var(--muted);margin-top:4px;font-family:var(--mono)}
+  .scard.po .num{color:var(--red)}
+  .scard.pubo .num{color:var(--green)}
+  .scard.pc .num{color:var(--amber)}
+  .scard.pubc .num{color:var(--faint)}
+  .ep-table{font-family:var(--mono);font-size:12.5px}
+  .ep-row{display:grid;grid-template-columns:70px 1fr 130px;gap:12px;padding:11px 22px;border-bottom:1px solid var(--line);align-items:center}
+  .ep-row:last-child{border-bottom:none}
+  .ep-row:hover{background:rgba(91,140,255,.04)}
+  .st{text-align:center;padding:2px 0;border-radius:5px;font-weight:700;font-size:11.5px}
+  .st.s2{background:rgba(74,222,128,.14);color:var(--green);border:1px solid rgba(74,222,128,.3)}
+  .st.s4{background:rgba(255,107,107,.14);color:var(--red);border:1px solid rgba(255,107,107,.3)}
+  .st.sa{background:rgba(245,183,78,.14);color:var(--amber);border:1px solid rgba(245,183,78,.3)}
+  .ep-url{color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ep-cat{text-align:right;font-size:10.5px;font-weight:700}
+  .cat-po{color:var(--red)}.cat-pubo{color:var(--green)}.cat-pc{color:var(--amber)}
+
+  /* install */
+  .install-box{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .install-tabs{display:flex;border-bottom:1px solid var(--line);font-family:var(--mono);font-size:13px}
+  .itab{padding:13px 20px;color:var(--muted);cursor:pointer;border-right:1px solid var(--line);transition:.2s}
+  .itab.active{color:var(--green);background:var(--panel-2)}
+  .itab:hover{color:var(--text)}
+  .install-code{padding:22px;font-family:var(--mono);font-size:13.5px;line-height:2}
+  .install-code .cmt{color:var(--faint)}
+  .install-code .cm{color:var(--green)}
+  .install-code .fl{color:var(--blue)}
+  .ipane{display:none}.ipane.active{display:block}
+  .copy-hint{float:right;font-size:11px;color:var(--faint);cursor:pointer;font-family:var(--mono)}
+  .copy-hint:hover{color:var(--green)}
+
+  /* compare */
+  .cmp{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:13.5px;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .cmp th,.cmp td{padding:14px 18px;text-align:left;border-bottom:1px solid var(--line)}
+  .cmp thead th{background:var(--panel-2);color:var(--muted);font-weight:600;font-size:12.5px}
+  .cmp thead th.sp{color:var(--green)}
+  .cmp td:first-child{color:var(--text)}
+  .cmp .yes{color:var(--green)}.cmp .no{color:var(--faint)}.cmp .par{color:var(--amber)}
+  .cmp tr:last-child td{border-bottom:none}
+  .cmp .spcol{color:var(--green);font-weight:600}
+
+  /* about / contact */
+  .about-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:stretch}
+  .about-card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:30px}
+  .about-card h3{font-family:var(--mono);font-size:18px;margin-bottom:14px;color:var(--green)}
+  .about-card p{color:var(--muted);font-size:14.5px;margin-bottom:10px}
+  .contact-links{display:flex;flex-direction:column;gap:12px;margin-top:8px}
+  .clink{display:flex;align-items:center;gap:14px;padding:15px 18px;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;transition:.2s;font-family:var(--mono)}
+  .clink:hover{border-color:var(--green-dim);transform:translateX(4px)}
+  .clink:hover .cl-ico{color:var(--green)}
+  .cl-ico{font-size:20px;color:var(--blue);transition:.2s;width:24px;text-align:center}
+  .cl-t{font-size:14px;color:var(--text)}
+  .cl-s{font-size:12px;color:var(--faint)}
+  .cl-arrow{margin-left:auto;color:var(--faint)}
+
+  /* legal note */
+  .legal{background:linear-gradient(120deg,rgba(255,107,107,.06),rgba(245,183,78,.04));border:1px solid rgba(255,107,107,.2);border-radius:12px;padding:24px 26px}
+  .legal h3{font-family:var(--mono);color:var(--amber);font-size:16px;margin-bottom:10px;display:flex;align-items:center;gap:10px}
+  .legal p{color:var(--muted);font-size:14px}
+  .legal b{color:var(--text)}
+
+  /* footer */
+  footer{border-top:1px solid var(--line);padding:36px 0;margin-top:20px}
+  .foot-in{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px}
+  .foot-brand{font-family:var(--mono);font-weight:800;color:var(--green)}
+  .foot-links{display:flex;gap:22px;font-family:var(--mono);font-size:13px}
+  .foot-links a{color:var(--muted);transition:.2s}.foot-links a:hover{color:var(--green)}
+  .foot-copy{font-family:var(--mono);font-size:12px;color:var(--faint)}
+
+  .reveal{opacity:0;transform:translateY(24px);transition:opacity .7s,transform .7s}
+  .reveal.in{opacity:1;transform:none}
+
+  @media(max-width:900px){
+    .hero{grid-template-columns:1fr;gap:34px}
+    .feat-grid{grid-template-columns:1fr 1fr}
+    .modes{grid-template-columns:1fr 1fr 1fr}
+    .about-grid{grid-template-columns:1fr}
+    .nav-links{display:none}
+    .menu-btn{display:block}
+    .nav-links.open{display:flex;position:absolute;top:62px;left:0;right:0;flex-direction:column;background:var(--bg-2);padding:20px 24px;border-bottom:1px solid var(--line);gap:16px}
+  }
+  @media(max-width:560px){
+    .feat-grid{grid-template-columns:1fr}
+    .modes{grid-template-columns:1fr 1fr}
+    .stat-row{grid-template-columns:1fr 1fr}
+    .hero-stats{flex-wrap:wrap;gap:20px}
+    .ep-row{grid-template-columns:56px 1fr;font-size:11px}
+    .ep-cat{display:none}
+    .install-code{font-size:12px}
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap nav-in">
+    <a href="#" class="brand"><span class="dot"></span>Shadow<b>Path</b></a>
+    <div class="nav-links" id="navlinks">
+      <a href="#features">features</a>
+      <a href="#modes">modes</a>
+      <a href="#preview">preview</a>
+      <a href="#install">install</a>
+      <a href="#compare">compare</a>
+      <a href="#about">about</a>
+    </div>
+    <a href="https://github.com/hehe986/ShadowPath" target="_blank" rel="noopener" class="nav-cta">★ GitHub</a>
+    <button class="menu-btn" onclick="document.getElementById('navlinks').classList.toggle('open')">▤</button>
+  </div>
+</nav>
+
+<!-- HERO -->
+<header class="wrap hero">
+  <div>
+    <span class="eyebrow">● live <span class="v">/ v2.2.0 stable</span></span>
+    <h1>Temukan endpoint<br>yang <span class="grad">tersembunyi.</span></h1>
+    <p class="lead">Reconnaissance engine untuk pentest & bug bounty. Gabungan passive archive harvesting, SPA-aware crawling, dan subdomain enumeration — dengan klasifikasi 4-arah yang cerdas.</p>
+    <div class="hero-btns">
+      <a href="https://github.com/hehe986/ShadowPath" target="_blank" rel="noopener" class="btn btn-primary">▶ Get Started</a>
+      <a href="#preview" class="btn btn-ghost">Lihat Demo</a>
+    </div>
+    <div class="hero-stats">
+      <div class="hstat"><div class="n"><b>5</b></div><div class="l">operating modes</div></div>
+      <div class="hstat"><div class="n"><b>4</b></div><div class="l">passive sources</div></div>
+      <div class="hstat"><div class="n"><b>4</b>-way</div><div class="l">classification</div></div>
+    </div>
+  </div>
+
+  <!-- signature: live terminal -->
+  <div class="term" aria-hidden="true">
+    <div class="term-bar">
+      <span class="c r"></span><span class="c y"></span><span class="c g"></span>
+      <span class="term-title">kali@shadowpath: ~/recon</span>
+    </div>
+    <div class="term-body" id="termBody"></div>
+  </div>
+</header>
+
+<!-- FEATURES -->
+<section id="features">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="sec-tag">capabilities</span>
+      <h2>Bukan sekadar daftar URL mentah.</h2>
+      <p>Kebanyakan tool cuma memuntahkan ribuan baris. ShadowPath mengumpulkan dari banyak sumber, memvalidasi, lalu mengelompokkan berdasarkan sensitivitas dan aksesibilitas.</p>
+    </div>
+    <div class="feat-grid">
+      <div class="feat reveal"><div class="fi">⧉</div><h3>Passive Harvesting</h3><p>Kumpulkan ribuan URL historis dari Wayback, Common Crawl, OTX, dan URLScan — tanpa menyentuh target.</p></div>
+      <div class="feat reveal"><div class="fi">◈</div><h3>SPA-Aware Crawler</h3><p>Render halaman JavaScript (React/Vue/Angular) via headless Chromium. Tangkap link + API endpoint dari XHR/fetch.</p></div>
+      <div class="feat reveal"><div class="fi">⊞</div><h3>4-Way Classification</h3><p>Pisahkan endpoint berdasarkan sifat (private/public) × aksesibilitas (open/closed). Context-aware, minim false positive.</p></div>
+      <div class="feat reveal"><div class="fi">⟁</div><h3>Subdomain Enum</h3><p>crt.sh, OTX, HackerTarget, Wayback, DNS bruteforce, dan permutation — digabung jadi satu peta lengkap.</p></div>
+      <div class="feat reveal"><div class="fi">◐</div><h3>Stealth Layer</h3><p>Rotasi User-Agent, jeda waktu Gaussian, header mimicry, dan noise interleaving untuk meniru pola manusia.</p></div>
+      <div class="feat reveal"><div class="fi">◫</div><h3>Interactive Report</h3><p>Laporan HTML yang bisa dicari & difilter, dengan badge kode status HTTP berwarna dan arsip per-scan.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- MODES -->
+<section id="modes" style="padding-top:20px">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="sec-tag">operating modes</span>
+      <h2>Lima mode, satu tool.</h2>
+      <p>Dari pengumpulan intelijen pasif tanpa jejak, sampai reconnaissance aktif penuh lintas subdomain.</p>
+    </div>
+    <div class="modes">
+      <div class="mode reveal"><div class="mn">OSINT</div><div class="md">Endpoint bocor di source code publik</div><span class="imp zero">zero traffic</span></div>
+      <div class="mode reveal"><div class="mn">Harvest</div><div class="md">URL historis dari arsip publik</div><span class="imp zero">passive</span></div>
+      <div class="mode reveal"><div class="mn">Crawl</div><div class="md">Spider real-time + SPA render</div><span class="imp low">minimal</span></div>
+      <div class="mode reveal"><div class="mn">Active</div><div class="md">Brute force dengan wordlist</div><span class="imp med">medium</span></div>
+      <div class="mode reveal"><div class="mn">Recon</div><div class="md">Subdomain enum + crawl penuh</div><span class="imp high">high</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- PREVIEW -->
+<section id="preview">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="sec-tag">sample output</span>
+      <h2>Hasil yang bisa langsung dibaca.</h2>
+      <p>Contoh laporan interaktif dari scan target latihan legal (testphp.vulnweb.com). Setiap endpoint dapat kode status dan kategori.</p>
+    </div>
+    <div class="report reveal">
+      <div class="report-top">
+        <div class="rt">🎯 Shadow<b>Path</b> Report</div>
+        <div class="report-meta">Target: testphp.vulnweb.com · Mode: CRAWL · Generated: 2026-08-23</div>
+      </div>
+      <div class="stat-row">
+        <div class="scard po"><div class="num">3</div><div class="lab">⚠ Private-Open</div></div>
+        <div class="scard pubo"><div class="num">14</div><div class="lab">✓ Public-Open</div></div>
+        <div class="scard pc"><div class="num">2</div><div class="lab">🔒 Private-Closed</div></div>
+        <div class="scard pubc"><div class="num">5</div><div class="lab">○ Public-Closed</div></div>
+      </div>
+      <div class="ep-table">
+        <div class="ep-row"><span class="st s2">200</span><span class="ep-url">/login.php</span><span class="ep-cat cat-po">PRIVATE-OPEN</span></div>
+        <div class="ep-row"><span class="st s2">200</span><span class="ep-url">/userinfo.php</span><span class="ep-cat cat-po">PRIVATE-OPEN</span></div>
+        <div class="ep-row"><span class="st s2">200</span><span class="ep-url">/artists.php?artist=1</span><span class="ep-cat cat-pubo">PUBLIC-OPEN</span></div>
+        <div class="ep-row"><span class="st s2">200</span><span class="ep-url">/listproducts.php?cat=1</span><span class="ep-cat cat-pubo">PUBLIC-OPEN</span></div>
+        <div class="ep-row"><span class="st s2">200</span><span class="ep-url">/showimage.php?file=./pictures/1.jpg</span><span class="ep-cat cat-pubo">PUBLIC-OPEN</span></div>
+        <div class="ep-row"><span class="st sa">403</span><span class="ep-url">/admin/config.php</span><span class="ep-cat cat-pc">PRIVATE-CLOSED</span></div>
+        <div class="ep-row"><span class="st s4">404</span><span class="ep-url">/backup.sql</span><span class="ep-cat cat-pc">PUBLIC-CLOSED</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- INSTALL -->
+<section id="install">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="sec-tag">getting started</span>
+      <h2>Jalan dalam 3 baris.</h2>
+      <p>Butuh Python 3.10+ dan git. Playwright opsional untuk render SPA.</p>
+    </div>
+    <div class="install-box reveal">
+      <div class="install-tabs">
+        <div class="itab active" data-pane="p-lin">Linux / macOS</div>
+        <div class="itab" data-pane="p-win">Windows</div>
+        <div class="itab" data-pane="p-run">First Scan</div>
+      </div>
+      <div class="install-code">
+        <div class="ipane active" id="p-lin">
+          <span class="copy-hint" onclick="copyPane('p-lin',this)">copy ⧉</span>
+<span class="cmt"># clone & install</span><br>
+<span class="cm">git</span> clone https://github.com/hehe986/ShadowPath<br>
+<span class="cm">cd</span> ShadowPath<br>
+<span class="cm">pip</span> install -r requirements.txt<br><br>
+<span class="cmt"># opsional: SPA rendering</span><br>
+<span class="cm">pip</span> install playwright <span class="fl">&&</span> playwright install chromium
+        </div>
+        <div class="ipane" id="p-win">
+          <span class="copy-hint" onclick="copyPane('p-win',this)">copy ⧉</span>
+<span class="cmt"># PowerShell</span><br>
+<span class="cm">git</span> clone https://github.com/hehe986/ShadowPath<br>
+<span class="cm">cd</span> ShadowPath<br>
+<span class="cm">python</span> -m pip install -r requirements.txt
+        </div>
+        <div class="ipane" id="p-run">
+          <span class="copy-hint" onclick="copyPane('p-run',this)">copy ⧉</span>
+<span class="cmt"># crawl cepat di target latihan legal</span><br>
+<span class="cm">python3</span> main.py -d testphp.vulnweb.com <span class="fl">--crawl</span> --max-pages 5<br><br>
+<span class="cmt"># harvest URL dari arsip publik</span><br>
+<span class="cm">python3</span> main.py -d testphp.vulnweb.com <span class="fl">--harvest --raw</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- COMPARE -->
+<section id="compare">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="sec-tag">comparison</span>
+      <h2>Di mana posisinya.</h2>
+      <p>Tool populer unggul di volume mentah. ShadowPath menggabungkan volume dengan klasifikasi dalam satu alat.</p>
+    </div>
+    <div class="reveal" style="overflow-x:auto">
+    <table class="cmp">
+      <thead><tr>
+        <th>Kemampuan</th><th>gau</th><th>katana</th><th class="sp">ShadowPath</th>
+      </tr></thead>
+      <tbody>
+        <tr><td>Passive archive harvest</td><td class="yes">✓</td><td class="no">✕</td><td class="spcol">✓</td></tr>
+        <tr><td>Live crawl</td><td class="no">✕</td><td class="yes">✓</td><td class="spcol">✓</td></tr>
+        <tr><td>SPA rendering</td><td class="no">✕</td><td class="yes">✓</td><td class="spcol">✓</td></tr>
+        <tr><td>Subdomain enumeration</td><td class="no">✕</td><td class="par">~</td><td class="spcol">✓</td></tr>
+        <tr><td>4-way classification</td><td class="no">✕</td><td class="no">✕</td><td class="spcol">✓</td></tr>
+        <tr><td>Interactive HTML report</td><td class="no">✕</td><td class="no">✕</td><td class="spcol">✓</td></tr>
+        <tr><td>Stealth timing layer</td><td class="no">✕</td><td class="par">~</td><td class="spcol">✓</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </div>
+</section>
+
+<!-- ABOUT / CONTACT -->
+<section id="about">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="sec-tag">about</span>
+      <h2>Dibangun sendiri, dari nol.</h2>
+    </div>
+    <div class="about-grid">
+      <div class="about-card reveal">
+        <h3>// tentang project</h3>
+        <p>ShadowPath dikembangkan sebagai engine reconnaissance modular untuk kebutuhan pentest dan bug bounty. Setiap komponen — dari stealth layer sampai klasifikasi endpoint — dirancang dan dibangun dari awal.</p>
+        <p>Tujuannya sederhana: menyaingi volume tool mainstream seperti gau dan katana, sambil menambahkan lapisan klasifikasi cerdas yang membuat hasil langsung bisa ditindaklanjuti.</p>
+        <p style="color:var(--faint);font-family:var(--mono);font-size:13px;margin-top:14px">Author · <span style="color:var(--green)">H1lm1.exe</span> · MIT License</p>
+      </div>
+      <div class="about-card reveal">
+        <h3>// connect</h3>
+        <p>Punya pertanyaan, masukan, atau mau berkontribusi? Silakan hubungi lewat kanal berikut.</p>
+        <div class="contact-links">
+          <a href="https://github.com/hehe986/ShadowPath" target="_blank" rel="noopener" class="clink">
+            <span class="cl-ico">◐</span>
+            <span><div class="cl-t">GitHub Repository</div><div class="cl-s">github.com/hehe986/ShadowPath</div></span>
+            <span class="cl-arrow">→</span>
+          </a>
+          <a href="https://instagram.com/_hey.hilmi" target="_blank" rel="noopener" class="clink">
+            <span class="cl-ico">◎</span>
+            <span><div class="cl-t">Instagram</div><div class="cl-s">@_hey.hilmi</div></span>
+            <span class="cl-arrow">→</span>
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <div class="legal reveal" style="margin-top:24px">
+      <h3>⚠ Legal & Ethics</h3>
+      <p>ShadowPath hanya untuk target dengan <b>izin eksplisit</b>: lab sendiri, CTF, atau program bug bounty yang in-scope. Penggunaan tanpa izin melanggar hukum — di Indonesia melalui <b>UU ITE Pasal 30</b>. Tool disediakan "sebagaimana adanya"; segala risiko dan tanggung jawab ada pada pengguna sepenuhnya.</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap foot-in">
+    <div class="foot-brand">◆ ShadowPath</div>
+    <div class="foot-links">
+      <a href="#features">Features</a>
+      <a href="#install">Install</a>
+      <a href="https://github.com/hehe986/ShadowPath" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://instagram.com/_hey.hilmi" target="_blank" rel="noopener">Instagram</a>
+    </div>
+    <div class="foot-copy">© 2026 H1lm1.exe · MIT</div>
+  </div>
+</footer>
+
+<script>
+// ---- Terminal typing animation ----
+const lines = [
+  {t:'<span class="prompt-user">kali@shadowpath</span>:<span class="prompt-path">~/recon</span>$ <span class="cmd">python3 main.py -d testphp.vulnweb.com --crawl</span>',d:40},
+  {t:'<span class="info">[*]</span> Target LIVE <span class="dim">(status:200, len:4212, server:nginx)</span>',d:14},
+  {t:'<span class="info">[*]</span> Resolving scheme... <span class="ok">http</span>',d:14},
+  {t:'<span class="ok">[✓]</span> Crawl complete — pages:4, URLs found:32, Endpoints:17',d:14},
+  {t:'<span class="dim">──────────────────────────────────────────</span>',d:8},
+  {t:'<span class="ok">[✓]</span> <span class="tag-po">PRIVATE-OPEN</span> <span class="cmd">/login.php</span> <span class="dim">[200]</span>',d:22},
+  {t:'<span class="ok">[✓]</span> <span class="tag-po">PRIVATE-OPEN</span> <span class="cmd">/userinfo.php</span> <span class="dim">[200]</span>',d:22},
+  {t:'<span class="ok">[✓]</span> <span class="cmd">/artists.php?artist=1</span> <span class="vio">→ SQLi?</span>',d:22},
+  {t:'<span class="ok">[✓]</span> <span class="cmd">/showimage.php?file=</span> <span class="vio">→ LFI?</span>',d:22},
+  {t:'<span class="warn">[!]</span> <span class="tag-pc">CLOSED</span> <span class="cmd">/admin/config.php</span> <span class="dim">[403]</span>',d:22},
+  {t:'<span class="ok">[✓]</span> Tech: <span class="info">nginx · PHP</span> · Report: results/report.html',d:14},
+  {t:'<span class="ok">[✓]</span> Scan completed in <span class="ok">18.4s</span>',d:14},
+  {t:'<span class="prompt-user">kali@shadowpath</span>:<span class="prompt-path">~/recon</span>$ <span class="cursor"></span>',d:0},
+];
+const body = document.getElementById('termBody');
+let li=0;
+function typeLine(){
+  if(li>=lines.length) return;
+  const {t,d}=lines[li];
+  const div=document.createElement('div');
+  div.className='line';
+  body.appendChild(div);
+  if(d===0){ div.innerHTML=t; li++; setTimeout(typeLine,300); return; }
+  // reveal char-by-char but keep html: simplest = type plain then set html
+  let i=0;
+  const plain=t.replace(/<[^>]+>/g,'');
+  const int=setInterval(()=>{
+    div.textContent=plain.slice(0,i);
+    i++;
+    if(i>plain.length){clearInterval(int);div.innerHTML=t;li++;setTimeout(typeLine,180);}
+  },d);
+}
+setTimeout(typeLine,500);
+
+// ---- Install tabs ----
+document.querySelectorAll('.itab').forEach(tab=>{
+  tab.addEventListener('click',()=>{
+    document.querySelectorAll('.itab').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.ipane').forEach(p=>p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById(tab.dataset.pane).classList.add('active');
+  });
+});
+function copyPane(id,el){
+  const txt=document.getElementById(id).innerText.replace('copy ⧉','').trim();
+  navigator.clipboard.writeText(txt).then(()=>{el.textContent='copied ✓';setTimeout(()=>el.textContent='copy ⧉',1400)});
+}
+
+// ---- Scroll reveal ----
+const io=new IntersectionObserver((es)=>{
+  es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}})
+},{threshold:.12});
+document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
+
+// close mobile menu on click
+document.querySelectorAll('#navlinks a').forEach(a=>a.addEventListener('click',()=>document.getElementById('navlinks').classList.remove('open')));
+</script>
+</body>
+</html>
