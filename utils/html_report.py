@@ -97,7 +97,10 @@ class HTMLReport:
         """
         smap = {}
         for key in ("validated", "raw_results", "results", "raw"):
-            for item in (data.get(key) or []):
+            val = data.get(key)
+            if not isinstance(val, list):
+                continue  # harvest mode pakai raw=bool, skip
+            for item in val:
                 if isinstance(item, dict) and item.get("url"):
                     sc = item.get("status_code")
                     if sc is not None:
